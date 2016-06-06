@@ -56,7 +56,7 @@ define([
         var messagesHistory = [];
         var chainpadAdapter = {};
         var realtime;
-        var network;
+        var network = config.network;
 
         var parseMessage = function (msg) { return unBencode(msg); };
 
