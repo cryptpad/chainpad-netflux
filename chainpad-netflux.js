@@ -44,8 +44,8 @@ define([
         var channel = config.channel;
         var chanKey = config.cryptKey || '';
         var Crypto = config.crypto;
+        /* TODO this dependency on crypto is really unfortunate */
         var cryptKey = Crypto.parseKey(chanKey).cryptKey;
-        var passwd = 'y';
 
         // make sure configuration is defined
         config = config || {};
