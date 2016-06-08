@@ -126,9 +126,14 @@ Due to the fact that remote changes are received asynchronously, this function w
 
 In instances where these changes would conflict, `transformFunction` (specified below) will be called.
 
-#### transformFunction (function)
+#### transformFunction
 
 The pluggable _Operational Transformation_ function to be supplied to Chainpad.
+See [Chainpad: configuration parameters](https://github.com/xwiki-contrib/chainpad#configuration-parameters) for more information.
+
+#### validateContent
+
+The pluggable patch verification function to be supplied to chainpad.
 See [Chainpad: configuration parameters](https://github.com/xwiki-contrib/chainpad#configuration-parameters) for more information.
 
 ## Installation

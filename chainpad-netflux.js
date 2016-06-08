@@ -165,10 +165,10 @@ define([
                 userName: userName,
                 initialState: config.initialState,
                 transformFunction: config.transformFunction,
+                validateContent: config.validateContent,
                 logLevel: typeof(config.logLevel) !== 'undefined'? config.logLevel : 1
             });
         };
-
 
         var onOpen = function(wc, network) {
             channel = wc.id;
