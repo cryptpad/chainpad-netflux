@@ -127,12 +127,12 @@ define([
 
         // update UI components to show that one of the other peers has left
         var onLeaving = function(peer) {
-          var list = userList.users;
-          var index = list.indexOf(peer);
-          if(index !== -1) {
-            userList.users.splice(index, 1);
-          }
-          userList.onChange();
+            var list = userList.users;
+            var index = list.indexOf(peer);
+            if(index !== -1) {
+                userList.users.splice(index, 1);
+            }
+            userList.onChange();
         };
 
         // shim between chainpad and netflux
@@ -166,6 +166,7 @@ define([
                 initialState: config.initialState,
                 transformFunction: config.transformFunction,
                 validateContent: config.validateContent,
+                avgSyncMilliseconds: config.avgSyncMilliseconds,
                 logLevel: typeof(config.logLevel) !== 'undefined'? config.logLevel : 1
             });
         };
