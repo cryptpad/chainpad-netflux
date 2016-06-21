@@ -32,7 +32,7 @@ define([
     var debug = function (x) { console.log(x); },
         warn = function (x) { console.error(x); },
         verbose = function (x) { console.log(x); };
-    verbose = function () {}; // comment out to enable verbose logging
+        verbose = function () {}; // comment out to enable verbose logging
 
     var unBencode = function (str) { return str.replace(/^\d+:/, ''); };
 
@@ -42,10 +42,7 @@ define([
         var websocketUrl = config.websocketURL;
         var userName = config.userName;
         var channel = config.channel;
-        var chanKey = config.cryptKey || '';
         var Crypto = config.crypto;
-        /* TODO this dependency on crypto is really unfortunate */
-        var cryptKey = Crypto.parseKey(chanKey).cryptKey;
 
         // make sure configuration is defined
         config = config || {};
@@ -140,7 +137,7 @@ define([
             msgIn : function(peerId, msg) {
                 msg = msg.replace(/^cp\|/, '');
                 try {
-                    var decryptedMsg = Crypto.decrypt(msg, cryptKey);
+                    var decryptedMsg = Crypto.decrypt(msg);
                     messagesHistory.push(decryptedMsg);
                     return decryptedMsg;
                 } catch (err) {
@@ -150,7 +147,7 @@ define([
             },
             msgOut : function(msg, wc) {
                 try {
-                    var cmsg = Crypto.encrypt(msg, cryptKey);
+                    var cmsg = Crypto.encrypt(msg);
                     if (msg.indexOf('[4') === 0) { cmsg = 'cp|' + cmsg; }
                     return cmsg;
                 } catch (err) {
