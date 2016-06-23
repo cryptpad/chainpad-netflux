@@ -76,6 +76,10 @@ define([
         };
 
         var onReady = function(wc, network) {
+            // Trigger onReady only if not ready yet. This is important because the history keeper sends a direct
+            // message through "network" when it is synced, and it triggers onReady for each channel joined.
+            if (!initializing) { return; }
+
             if(config.setMyID) {
                 config.setMyID({
                     myID: wc.myID
@@ -89,7 +93,10 @@ define([
 
             if (config.onReady) {
                 config.onReady({
-                    realtime: realtime
+                    realtime: realtime,
+                    network: network,
+                    userList: userList,
+                    myId: wc.myID
                 });
             }
         };
@@ -192,9 +199,8 @@ define([
                     realtime: realtime,
                     getLag: network.getLag,
                     userList: userList,
-
-                    // channel
-                    channel: channel,
+                    network: network,
+                    channel: channel
                 });
             }
 
