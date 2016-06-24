@@ -61,7 +61,12 @@ define([
         var parseMessage = function (msg) { return unBencode(msg); };
 
         var userList = {
-            onChange : function() {},
+            change : [],
+            onChange : function(newData) {
+                userList.change.forEach(function (el) {
+                    el(newData);
+                });
+            },
             users: []
         };
 
