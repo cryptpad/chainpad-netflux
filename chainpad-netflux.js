@@ -32,7 +32,7 @@ define([
     var debug = function (x) { console.log(x); },
         warn = function (x) { console.error(x); },
         verbose = function (x) { console.log(x); };
-    verbose = function () {}; // comment out to enable verbose logging
+        verbose = function () {}; // comment out to enable verbose logging
 
     var unBencode = function (str) { return str.replace(/^\d+:/, ''); };
 
@@ -42,10 +42,7 @@ define([
         var websocketUrl = config.websocketURL;
         var userName = config.userName;
         var channel = config.channel;
-        var chanKey = config.cryptKey || '';
         var Crypto = config.crypto;
-        var cryptKey = Crypto.parseKey(chanKey).cryptKey;
-        var passwd = 'y';
 
         // make sure configuration is defined
         config = config || {};
@@ -139,12 +136,12 @@ define([
 
         // update UI components to show that one of the other peers has left
         var onLeaving = function(peer) {
-          var list = userList.users;
-          var index = list.indexOf(peer);
-          if(index !== -1) {
-            userList.users.splice(index, 1);
-          }
-          userList.onChange();
+            var list = userList.users;
+            var index = list.indexOf(peer);
+            if(index !== -1) {
+                userList.users.splice(index, 1);
+            }
+            userList.onChange();
         };
 
         // shim between chainpad and netflux
@@ -152,7 +149,7 @@ define([
             msgIn : function(peerId, msg) {
                 msg = msg.replace(/^cp\|/, '');
                 try {
-                    var decryptedMsg = Crypto.decrypt(msg, cryptKey);
+                    var decryptedMsg = Crypto.decrypt(msg);
                     messagesHistory.push(decryptedMsg);
                     return decryptedMsg;
                 } catch (err) {
@@ -162,7 +159,7 @@ define([
             },
             msgOut : function(msg, wc) {
                 try {
-                    var cmsg = Crypto.encrypt(msg, cryptKey);
+                    var cmsg = Crypto.encrypt(msg);
                     if (msg.indexOf('[4') === 0) { cmsg = 'cp|' + cmsg; }
                     return cmsg;
                 } catch (err) {
@@ -177,10 +174,11 @@ define([
                 userName: userName,
                 initialState: config.initialState,
                 transformFunction: config.transformFunction,
+                validateContent: config.validateContent,
+                avgSyncMilliseconds: config.avgSyncMilliseconds,
                 logLevel: typeof(config.logLevel) !== 'undefined'? config.logLevel : 1
             });
         };
-
 
         var onOpen = function(wc, network) {
             channel = wc.id;
