@@ -98,7 +98,8 @@ define([
                     realtime: realtime,
                     network: network,
                     userList: userList,
-                    myId: wc.myID
+                    myId: wc.myID,
+                    leave: wc.leave
                 });
             }
         };
