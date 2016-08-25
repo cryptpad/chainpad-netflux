@@ -181,7 +181,7 @@ define([
             });
         };
 
-        var onOpen = function(wc, network) {
+        var onOpen = function(wc, network, initialize) {
             channel = wc.id;
 
             // Add the existing peers in the userList
@@ -195,40 +195,46 @@ define([
             wc.on('leave', onLeaving);
 
             // Open a Chainpad session
-            toReturn.realtime = realtime = createRealtime();
-
-            if(config.onInit) {
-                config.onInit({
-                    myID: wc.myID,
-                    realtime: realtime,
-                    getLag: network.getLag,
-                    userList: userList,
-                    network: network,
-                    channel: channel
-                });
+            if (!realtime) {
+                toReturn.realtime = realtime = createRealtime();
             }
 
-            // Sending a message...
-            realtime.onMessage(function(message, cb) {
-                // Filter messages sent by Chainpad to make it compatible with Netflux
-                message = chainpadAdapter.msgOut(message, wc);
-                if(message) {
-                  wc.bcast(message).then(function() {
-                    cb();
-                  }, function(err) {
-                    // The message has not been sent, display the error.
-                    console.error(err);
-                  });
-                }
-            });
-
-            realtime.onPatch(function () {
-                if (config.onRemote) {
-                    config.onRemote({
-                        realtime: realtime
+            if (initialize) {
+                if (config.onInit) {
+                    config.onInit({
+                        myID: wc.myID,
+                        realtime: realtime,
+                        getLag: network.getLag,
+                        userList: userList,
+                        network: network,
+                        channel: channel
                     });
                 }
-            });
+
+                // Sending a message...
+                realtime.onMessage(function(message, cb) {
+                    // Filter messages sent by Chainpad to make it compatible with Netflux
+                    message = chainpadAdapter.msgOut(message, wc);
+                    if(message) {
+                      wc.bcast(message).then(function() {
+                        cb();
+                      }, function(err) {
+                        // The message has not been sent, display the error.
+                        console.error(err);
+                      });
+                    }
+                });
+
+                realtime.onPatch(function () {
+                    if (config.onRemote) {
+                        config.onRemote({
+                            realtime: realtime
+                        });
+                    }
+                });
+
+                realtime.start();
+            }
 
             // Get the channel history
             if(USE_HISTORY) {
@@ -241,10 +247,7 @@ define([
 
               if (hc) { network.sendto(hc, JSON.stringify(['GET_HISTORY', wc.id])); }
             }
-
-            realtime.start();
-
-            if(!USE_HISTORY) {
+            else {
               onReady(wc, network);
             }
         };
@@ -272,39 +275,64 @@ define([
                 endPoint.then(cb);
             } else {
                 // assume it's a network and try to connect.
-                cb(network);
+                cb(endPoint);
             }
         };
 
+        var firstConnection = true;
         /*  Connect to the Netflux network, or fall back to a WebSocket
             in theory this lets us connect to more netflux channels using only
             one network. */
-        joinSession(network || websocketUrl, function (network) {
-            // pass messages that come out of netflux into our local handler
-
-            toReturn.network = network;
-
-            network.on('disconnect', function (reason) {
-                if (config.onAbort) {
-                    config.onAbort({
-                        reason: reason
-                    });
-                }
-            });
-
-            network.on('message', function (msg, sender) { // Direct message
-                var wchan = findChannelById(network.webChannels, channel);
-                if(wchan) {
-                  onMessage(sender, msg, wchan, network);
-                }
-            });
-
+        var connectTo = function (network) {
             // join the netflux network, promise to handle opening of the channel
             network.join(channel || null).then(function(wc) {
-                onOpen(wc, network);
+                onOpen(wc, network, firstConnection);
+                firstConnection = false;
             }, function(error) {
                 console.error(error);
             });
+        }
+        joinSession(network || websocketUrl, function (network) {
+            // pass messages that come out of netflux into our local handler
+
+            if (firstConnection) {
+                toReturn.network = network;
+
+                network.on('disconnect', function (reason) {
+                    if (config.onConnectionChange) {
+                        config.onConnectionChange({
+                            state: false
+                        });
+                        return;
+                    }
+                    if (config.onAbort) {
+                        config.onAbort({
+                            reason: reason
+                        });
+                    }
+                });
+
+                network.on('reconnect', function (uid) {
+                    if (config.onConnectionChange) {
+                        config.onConnectionChange({
+                            state: true,
+                            myId: uid
+                        });
+                        initializing = true;
+                        userList.users=[];
+                        joinSession(network, connectTo);
+                    }
+                });
+
+                network.on('message', function (msg, sender) { // Direct message
+                    var wchan = findChannelById(network.webChannels, channel);
+                    if(wchan) {
+                      onMessage(sender, msg, wchan, network);
+                    }
+                });
+            }
+
+            connectTo(network);
         }, function(error) {
             warn(error);
         });
