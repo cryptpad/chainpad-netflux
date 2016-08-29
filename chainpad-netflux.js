@@ -195,9 +195,7 @@ define([
             wc.on('leave', onLeaving);
 
             // Open a Chainpad session
-            if (!realtime) {
-                toReturn.realtime = realtime = createRealtime();
-            }
+            toReturn.realtime = realtime = createRealtime();
 
             if (initialize) {
                 if (config.onInit) {
@@ -210,31 +208,30 @@ define([
                         channel: channel
                     });
                 }
-
-                // Sending a message...
-                realtime.onMessage(function(message, cb) {
-                    // Filter messages sent by Chainpad to make it compatible with Netflux
-                    message = chainpadAdapter.msgOut(message, wc);
-                    if(message) {
-                      wc.bcast(message).then(function() {
+            }
+            // Sending a message...
+            realtime.onMessage(function(message, cb) {
+                // Filter messages sent by Chainpad to make it compatible with Netflux
+                message = chainpadAdapter.msgOut(message, wc);
+                if(message) {
+                    wc.bcast(message).then(function() {
                         cb();
-                      }, function(err) {
+                    }, function(err) {
                         // The message has not been sent, display the error.
                         console.error(err);
-                      });
-                    }
-                });
+                    });
+                }
+            });
 
-                realtime.onPatch(function () {
-                    if (config.onRemote) {
-                        config.onRemote({
-                            realtime: realtime
-                        });
-                    }
-                });
+            realtime.onPatch(function () {
+                if (config.onRemote) {
+                    config.onRemote({
+                        realtime: realtime
+                    });
+                }
+            });
 
-                realtime.start();
-            }
+            realtime.start();
 
             // Get the channel history
             if(USE_HISTORY) {
@@ -318,9 +315,20 @@ define([
                             state: true,
                             myId: uid
                         });
-                        initializing = true;
-                        userList.users=[];
-                        joinSession(network, connectTo);
+                        var afterReconnecting = function () {
+                            initializing = true;
+                            userList.users=[];
+                            joinSession(network, connectTo);
+                        };
+                        if (config.beforeReconnecting) {
+                            config.beforeReconnecting(function (newKey, newContent) {
+                                channel = newKey;
+                                config.initialState = newContent;
+                                afterReconnecting();
+                            });
+                            return;
+                        }
+                        afterReconnecting();
                     }
                 });
 
