@@ -104,14 +104,29 @@ define([
             }
         };
 
-        var onMessage = function(peer, msg, wc, network) {
+        var onMessage = function(peer, msg, wc, network, direct) {
             // unpack the history keeper from the webchannel
             var hc = (wc && wc.history_keeper) ? wc.history_keeper : null;
 
+            // Old server
             if(wc && (msg === 0 || msg === '0')) {
                 onReady(wc, network);
                 return;
             }
+            if (direct) {
+                var parsed = JSON.parse(msg);
+                if (parsed.state && parsed.state === 1 && parsed.channel) {
+                    if (parsed.channel === wc.id) {
+                        onReady(wc, network);
+                    }
+                    // We have to return even if it is not the current channel:
+                    // we don't want to continue with other channels messages here
+                    return;
+                }
+            }
+
+            // The history keeper is different for each channel :
+            // no need to check if the message it related to the current channel
             if (peer === hc){
                 // if the peer is the 'history keeper', extract their message
                 msg = JSON.parse(msg)[4];
@@ -335,7 +350,7 @@ define([
                 network.on('message', function (msg, sender) { // Direct message
                     var wchan = findChannelById(network.webChannels, channel);
                     if(wchan) {
-                      onMessage(sender, msg, wchan, network);
+                      onMessage(sender, msg, wchan, network, true);
                     }
                 });
             }
