@@ -43,6 +43,8 @@ define([
         var userName = config.userName;
         var channel = config.channel;
         var Crypto = config.crypto;
+        var validateKey = config.validateKey;
+        var readOnly = config.readOnly || false;
 
         // make sure configuration is defined
         config = config || {};
@@ -88,7 +90,9 @@ define([
                 });
             }
             // Trigger onJoining with our own Cryptpad username to tell the toolbar that we are synced
-            onJoining(wc.myID);
+            if (!readOnly) {
+                onJoining(wc.myID);
+            }
 
             // we're fully synced
             initializing = false;
@@ -174,6 +178,7 @@ define([
                 }
             },
             msgOut : function(msg, wc) {
+                if (readOnly) { return; }
                 try {
                     var cmsg = Crypto.encrypt(msg);
                     if (msg.indexOf('[4') === 0) { cmsg = 'cp|' + cmsg; }
@@ -297,7 +302,7 @@ define([
             one network. */
         var connectTo = function (network) {
             // join the netflux network, promise to handle opening of the channel
-            network.join(channel || null).then(function(wc) {
+            network.join(channel || null, validateKey).then(function(wc) {
                 onOpen(wc, network, firstConnection);
                 firstConnection = false;
             }, function(error) {
