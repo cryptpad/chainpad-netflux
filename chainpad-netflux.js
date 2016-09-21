@@ -119,6 +119,14 @@ define([
             }
             if (direct) {
                 var parsed = JSON.parse(msg);
+                if (parsed.validateKey && parsed.channel) {
+                    if (parsed.channel === wc.id && !validateKey) {
+                        validateKey = parsed.validateKey;
+                    }
+                    // We have to return even if it is not the current channel:
+                    // we don't want to continue with other channels messages here
+                    return;
+                }
                 if (parsed.state && parsed.state === 1 && parsed.channel) {
                     if (parsed.channel === wc.id) {
                         onReady(wc, network);
@@ -130,10 +138,13 @@ define([
             }
 
             // The history keeper is different for each channel :
-            // no need to check if the message it related to the current channel
+            // no need to check if the message is related to the current channel
             if (peer === hc){
                 // if the peer is the 'history keeper', extract their message
-                msg = JSON.parse(msg)[4];
+                var parsed = JSON.parse(msg);
+                msg = parsed[4];
+                // Check that this is a message for us
+                if (parsed[3] !== wc.id) { return; }
             }
             var message = chainpadAdapter.msgIn(peer, msg);
 
@@ -169,7 +180,7 @@ define([
             msgIn : function(peerId, msg) {
                 msg = msg.replace(/^cp\|/, '');
                 try {
-                    var decryptedMsg = Crypto.decrypt(msg);
+                    var decryptedMsg = Crypto.decrypt(msg, validateKey);
                     messagesHistory.push(decryptedMsg);
                     return decryptedMsg;
                 } catch (err) {
@@ -262,7 +273,12 @@ define([
               });
               wc.history_keeper = hc;
 
-              if (hc) { network.sendto(hc, JSON.stringify(['GET_HISTORY', wc.id])); }
+              var msg = ['GET_HISTORY', wc.id];
+              // Add the validateKey if we are the channel creator and we have a validateKey
+              if (validateKey && !config.channel) {
+                  msg.push(validateKey);
+              }
+              if (hc) { network.sendto(hc, JSON.stringify(msg)); }
             }
             else {
               onReady(wc, network);
@@ -302,7 +318,7 @@ define([
             one network. */
         var connectTo = function (network) {
             // join the netflux network, promise to handle opening of the channel
-            network.join(channel || null, validateKey).then(function(wc) {
+            network.join(channel || null).then(function(wc) {
                 onOpen(wc, network, firstConnection);
                 firstConnection = false;
             }, function(error) {
