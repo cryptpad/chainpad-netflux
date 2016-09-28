@@ -285,6 +285,12 @@ define([
             }
         };
 
+        // Set a flag to avoid calling onAbort or onConnectionChange when the user is leaving the page
+        var isIntentionallyLeaving = false;
+        window.addEventListener("beforeunload", function (event) {
+            isIntentionallyLeaving = true;
+        });
+
         var findChannelById = function(webChannels, channelId) {
             var webChannel;
 
@@ -324,7 +330,8 @@ define([
             }, function(error) {
                 console.error(error);
             });
-        }
+        };
+
         joinSession(network || websocketUrl, function (network) {
             // pass messages that come out of netflux into our local handler
 
@@ -332,6 +339,7 @@ define([
                 toReturn.network = network;
 
                 network.on('disconnect', function (reason) {
+                    if (isIntentionallyLeaving) { return; }
                     if (config.onConnectionChange) {
                         config.onConnectionChange({
                             state: false
