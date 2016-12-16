@@ -303,15 +303,23 @@ define([
             return webChannel;
         };
 
+        var onConnectError = function (err) {
+            if (config.onError) {
+                config.onError({
+                    error: err.type
+                });
+            }
+        };
+
         var joinSession = function (endPoint, cb) {
             // a websocket URL has been provided
             // connect to it with Netflux.
             if (typeof(endPoint) === 'string') {
-                Netflux.connect(endPoint).then(cb);
+                Netflux.connect(endPoint).then(cb, onConnectError);
             } else if (typeof(endPoint.then) ==- 'function') {
                 // a netflux network promise was provided
                 // connect to it and use a channel
-                endPoint.then(cb);
+                endPoint.then(cb, onConnectError);
             } else {
                 // assume it's a network and try to connect.
                 cb(endPoint);
@@ -334,7 +342,6 @@ define([
 
         joinSession(network || websocketUrl, function (network) {
             // pass messages that come out of netflux into our local handler
-
             if (firstConnection) {
                 toReturn.network = network;
 
@@ -385,9 +392,7 @@ define([
             }
 
             connectTo(network);
-        }, function(error) {
-            warn(error);
-        });
+        }, onConnectError);
 
         return toReturn;
     };
