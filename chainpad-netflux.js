@@ -275,7 +275,7 @@ define([
 
               var msg = ['GET_HISTORY', wc.id];
               // Add the validateKey if we are the channel creator and we have a validateKey
-              if (validateKey && !config.channel) {
+              if (validateKey) {
                   msg.push(validateKey);
               }
               if (hc) { network.sendto(hc, JSON.stringify(msg)); }
