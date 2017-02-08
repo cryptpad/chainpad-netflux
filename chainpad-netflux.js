@@ -347,6 +347,7 @@ define([
 
                 network.on('disconnect', function (reason) {
                     if (isIntentionallyLeaving) { return; }
+                    if (reason === "network.disconnect() called") { return; }
                     if (config.onConnectionChange) {
                         config.onConnectionChange({
                             state: false
