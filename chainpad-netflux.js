@@ -227,6 +227,20 @@ define([
 
             // Open a Chainpad session
             toReturn.realtime = realtime = createRealtime();
+            realtime._patch = realtime.patch;
+            realtime.patch = function (patch, x, y) {
+                if (initializing) {
+                    console.error("attempted to change the content before chainpad was synced");
+                }
+                return realtime._patch(patch, x, y);
+            };
+            realtime._change = realtime.change;
+            realtime.change = function (offset, count, chars) {
+                if (initializing) {
+                    console.error("attempted to change the content before chainpad was synced");
+                }
+                return realtime._change(offset, count, chars);
+            };
 
             if (initialize) {
                 if (config.onInit) {
