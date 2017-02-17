@@ -84,6 +84,8 @@ define([
             // message through "network" when it is synced, and it triggers onReady for each channel joined.
             if (!initializing) { return; }
 
+            realtime.start();
+
             if(config.setMyID) {
                 config.setMyID({
                     myID: wc.myID
@@ -275,8 +277,6 @@ define([
                     });
                 }
             });
-
-            realtime.start();
 
             // Get the channel history
             if(USE_HISTORY) {
