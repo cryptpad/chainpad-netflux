@@ -285,7 +285,7 @@ define([
               wc.members.forEach(function (p) {
                 if (p.length === 16) { hc = p; }
               });
-              hc = network.historyKeeper;
+              network.historyKeeper = hc;
 
               var msg = ['GET_HISTORY', wc.id];
               // Add the validateKey if we are the channel creator and we have a validateKey
