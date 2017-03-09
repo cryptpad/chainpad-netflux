@@ -112,7 +112,7 @@ define([
 
         var onMessage = function(peer, msg, wc, network, direct) {
             // unpack the history keeper from the webchannel
-            var hc = (wc && wc.history_keeper) ? wc.history_keeper : null;
+            var hc = network.historyKeeper;
 
             // Old server
             if(wc && (msg === 0 || msg === '0')) {
@@ -285,7 +285,7 @@ define([
               wc.members.forEach(function (p) {
                 if (p.length === 16) { hc = p; }
               });
-              wc.history_keeper = hc;
+              hc = network.historyKeeper;
 
               var msg = ['GET_HISTORY', wc.id];
               // Add the validateKey if we are the channel creator and we have a validateKey
