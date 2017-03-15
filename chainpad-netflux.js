@@ -56,6 +56,7 @@ define([
         var chainpadAdapter = {};
         var realtime;
         var network = config.network;
+        var lastKnownHash;
 
         var parseMessage = function (msg) { return unBencode(msg); };
 
@@ -112,7 +113,7 @@ define([
 
         var onMessage = function(peer, msg, wc, network, direct) {
             // unpack the history keeper from the webchannel
-            var hc = network.historyKeeper;
+            var hk = network.historyKeeper;
 
             // Old server
             if(wc && (msg === 0 || msg === '0')) {
@@ -141,13 +142,15 @@ define([
 
             // The history keeper is different for each channel :
             // no need to check if the message is related to the current channel
-            if (peer === hc){
+            if (peer === hk){
                 // if the peer is the 'history keeper', extract their message
                 var parsed = JSON.parse(msg);
                 msg = parsed[4];
                 // Check that this is a message for us
                 if (parsed[3] !== wc.id) { return; }
             }
+
+            lastKnownHash = msg.slice(0,64);
             var message = chainpadAdapter.msgIn(peer, msg);
 
             verbose(message);
@@ -190,7 +193,7 @@ define([
                     return msg;
                 }
             },
-            msgOut : function(msg, wc) {
+            msgOut : function(msg) {
                 if (readOnly) { return; }
                 try {
                     var cmsg = Crypto.encrypt(msg);
@@ -214,7 +217,12 @@ define([
             });
         };
 
+        // We use an object to store the webchannel so that we don't have to push new handlers to chainpad
+        // and remove the old ones when reconnecting and keeping the same 'realtime' object
+        // See realtime.onMessage below: we call wc.bcast(...) but wc may change
+        var wcObject = {};
         var onOpen = function(wc, network, initialize) {
+            wcObject.wc = wc;
             channel = wc.id;
 
             // Add the existing peers in the userList
@@ -227,24 +235,24 @@ define([
             wc.on('join', onJoining);
             wc.on('leave', onLeaving);
 
-            // Open a Chainpad session
-            toReturn.realtime = realtime = createRealtime();
-            realtime._patch = realtime.patch;
-            realtime.patch = function (patch, x, y) {
-                if (initializing) {
-                    console.error("attempted to change the content before chainpad was synced");
-                }
-                return realtime._patch(patch, x, y);
-            };
-            realtime._change = realtime.change;
-            realtime.change = function (offset, count, chars) {
-                if (initializing) {
-                    console.error("attempted to change the content before chainpad was synced");
-                }
-                return realtime._change(offset, count, chars);
-            };
-
             if (initialize) {
+                toReturn.realtime = realtime = createRealtime();
+
+                realtime._patch = realtime.patch;
+                realtime.patch = function (patch, x, y) {
+                    if (initializing) {
+                        console.error("attempted to change the content before chainpad was synced");
+                    }
+                    return realtime._patch(patch, x, y);
+                };
+                realtime._change = realtime.change;
+                realtime.change = function (offset, count, chars) {
+                    if (initializing) {
+                        console.error("attempted to change the content before chainpad was synced");
+                    }
+                    return realtime._change(offset, count, chars);
+                };
+
                 if (config.onInit) {
                     config.onInit({
                         myID: wc.myID,
@@ -255,44 +263,46 @@ define([
                         channel: channel
                     });
                 }
-            }
-            // Sending a message...
-            realtime.onMessage(function(message, cb) {
-                // Filter messages sent by Chainpad to make it compatible with Netflux
-                message = chainpadAdapter.msgOut(message, wc);
-                if(message) {
-                    wc.bcast(message).then(function() {
-                        cb();
-                    }, function(err) {
-                        // The message has not been sent, display the error.
-                        console.error(err);
-                    });
-                }
-            });
 
-            realtime.onPatch(function () {
-                if (config.onRemote) {
-                    config.onRemote({
-                        realtime: realtime
-                    });
-                }
-            });
+                // Sending a message...
+                realtime.onMessage(function(message, cb) {
+                    // Filter messages sent by Chainpad to make it compatible with Netflux
+                    message = chainpadAdapter.msgOut(message);
+                    if(message) {
+                        // Do not remove wcObject, it allows us to use a new 'wc' without changing the handler if we
+                        // want to keep the same chainpad (realtime) object
+                        wcObject.wc.bcast(message).then(function() {
+                            cb();
+                        }, function(err) {
+                            // The message has not been sent, display the error.
+                            console.error(err);
+                        });
+                    }
+                });
+
+                realtime.onPatch(function () {
+                    if (config.onRemote) {
+                        config.onRemote({
+                            realtime: realtime
+                        });
+                    }
+                });
+            }
 
             // Get the channel history
             if(USE_HISTORY) {
-              var hc;
+                var hk;
 
-              wc.members.forEach(function (p) {
-                if (p.length === 16) { hc = p; }
-              });
-              network.historyKeeper = hc;
+                wc.members.forEach(function (p) {
+                    if (p.length === 16) { hk = p; }
+                });
+                network.historyKeeper = hk;
 
-              var msg = ['GET_HISTORY', wc.id];
-              // Add the validateKey if we are the channel creator and we have a validateKey
-              if (validateKey) {
-                  msg.push(validateKey);
-              }
-              if (hc) { network.sendto(hc, JSON.stringify(msg)); }
+                var msg = ['GET_HISTORY', wc.id];
+                // Add the validateKey if we are the channel creator and we have a validateKey
+                msg.push(validateKey);
+                msg.push(lastKnownHash);
+                if (hk) { network.sendto(hk, JSON.stringify(msg)); }
             }
             else {
               onReady(wc, network);
