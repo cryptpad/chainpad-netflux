@@ -22,6 +22,6 @@
   ],
   "dependencies": {
     "netflux-websocket": "^0.1.5",
-    "chainpad": "^0.3.0"
+    "chainpad": "^0.4.0"
   }
 }
