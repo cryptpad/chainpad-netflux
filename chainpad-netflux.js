@@ -19,26 +19,15 @@ define([
     '/bower_components/chainpad/chainpad.dist.js',
 ], function (Netflux) {
     var ChainPad = window.ChainPad;
-    var PARANOIA = true;
     var USE_HISTORY = true;
     var module = { exports: {} };
 
-    /**
-     * If an error is encountered but it is recoverable, do not immediately fail
-     * but if it keeps firing errors over and over, do fail.
-     */
-    var MAX_RECOVERABLE_ERRORS = 15;
-
-    var debug = function (x) { console.log(x); },
-        warn = function (x) { console.error(x); },
-        verbose = function (x) { console.log(x); };
-        verbose = function () {}; // comment out to enable verbose logging
+    var verbose = function (x) { console.log(x); };
+    verbose = function () {}; // comment out to enable verbose logging
 
     var unBencode = function (str) { return str.replace(/^\d+:/, ''); };
 
-    var start = module.exports.start =
-        function (config)
-    {
+    module.exports.start = function (config) {
         var websocketUrl = config.websocketURL;
         var userName = config.userName;
         var channel = config.channel;
@@ -50,15 +39,12 @@ define([
         config = config || {};
 
         var initializing = true;
-        var recoverableErrorCount = 0; // unused
         var toReturn = {};
         var messagesHistory = [];
         var chainpadAdapter = {};
         var realtime;
         var network = config.network;
         var lastKnownHash;
-
-        var parseMessage = function (msg) { return unBencode(msg); };
 
         var userList = {
             change : [],
@@ -144,10 +130,10 @@ define([
             // no need to check if the message is related to the current channel
             if (peer === hk){
                 // if the peer is the 'history keeper', extract their message
-                var parsed = JSON.parse(msg);
-                msg = parsed[4];
+                var parsed1 = JSON.parse(msg);
+                msg = parsed1[4];
                 // Check that this is a message for us
-                if (parsed[3] !== wc.id) { return; }
+                if (parsed1[3] !== wc.id) { return; }
             }
 
             lastKnownHash = msg.slice(0,64);
@@ -206,7 +192,7 @@ define([
             }
         };
 
-        var createRealtime = function(chan) {
+        var createRealtime = function() {
             return ChainPad.create({
                 userName: userName,
                 initialState: config.initialState,
@@ -311,7 +297,7 @@ define([
 
         // Set a flag to avoid calling onAbort or onConnectionChange when the user is leaving the page
         var isIntentionallyLeaving = false;
-        window.addEventListener("beforeunload", function (event) {
+        window.addEventListener("beforeunload", function () {
             isIntentionallyLeaving = true;
         });
 
@@ -340,7 +326,7 @@ define([
             // connect to it with Netflux.
             if (typeof(endPoint) === 'string') {
                 Netflux.connect(endPoint).then(cb, onConnectError);
-            } else if (typeof(endPoint.then) ==- 'function') {
+            } else if (typeof(endPoint.then) === 'function') {
                 // a netflux network promise was provided
                 // connect to it and use a channel
                 endPoint.then(cb, onConnectError);
