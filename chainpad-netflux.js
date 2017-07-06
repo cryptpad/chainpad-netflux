@@ -106,6 +106,9 @@ define([
                 onReady(wc, network);
                 return;
             }
+            if (direct && peer !== hk) {
+                return;
+            }
             if (direct) {
                 var parsed = JSON.parse(msg);
                 if (parsed.validateKey && parsed.channel) {
@@ -125,7 +128,6 @@ define([
                     return;
                 }
             }
-
             // The history keeper is different for each channel :
             // no need to check if the message is related to the current channel
             if (peer === hk){
