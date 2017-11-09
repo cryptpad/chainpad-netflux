@@ -15,10 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 define([
-    '/bower_components/netflux-websocket/netflux-client.js',
-    '/bower_components/chainpad/chainpad.dist.js',
+    '/bower_components/netflux-websocket/netflux-client.js'
 ], function (Netflux) {
-    var ChainPad = window.ChainPad;
     var USE_HISTORY = true;
     var module = { exports: {} };
 
@@ -34,6 +32,7 @@ define([
         var Crypto = config.crypto;
         var validateKey = config.validateKey;
         var readOnly = config.readOnly || false;
+        var ChainPad = config.ChainPad || window.ChainPad;
 
         // make sure configuration is defined
         config = config || {};
@@ -199,6 +198,7 @@ define([
                 userName: userName,
                 initialState: config.initialState,
                 transformFunction: config.transformFunction,
+                patchTransformer: config.patchTransformer,
                 validateContent: config.validateContent,
                 avgSyncMilliseconds: config.avgSyncMilliseconds,
                 logLevel: typeof(config.logLevel) !== 'undefined'? config.logLevel : 1
