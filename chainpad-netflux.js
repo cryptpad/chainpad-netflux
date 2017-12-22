@@ -144,7 +144,7 @@ define([
 
             if (!initializing) {
                 if (config.onLocal) {
-                    config.onLocal();
+                    config.onLocal(true);
                 }
             }
 
