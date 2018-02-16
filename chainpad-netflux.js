@@ -44,6 +44,7 @@ define([
         var realtime;
         var network = config.network;
         var lastKnownHash;
+        var historyKeeperChange = [];
 
         var userList = {
             change : [],
@@ -284,7 +285,12 @@ define([
                 wc.members.forEach(function (p) {
                     if (p.length === 16) { hk = p; }
                 });
-                network.historyKeeper = hk;
+                if (network.historyKeeper !== hk) {
+                    network.historyKeeper = hk;
+                    historyKeeperChange.forEach(function (f) {
+                        f(hk);
+                    });
+                }
 
                 var msg = ['GET_HISTORY', wc.id];
                 // Add the validateKey if we are the channel creator and we have a validateKey
@@ -356,6 +362,10 @@ define([
             // pass messages that come out of netflux into our local handler
             if (firstConnection) {
                 toReturn.network = network;
+
+                network.onHistoryKeeperChange = function (todo) {
+                    historyKeeperChange.push(todo);
+                };
 
                 network.on('disconnect', function (reason) {
                     if (isIntentionallyLeaving) { return; }
