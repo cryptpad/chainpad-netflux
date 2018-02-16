@@ -31,6 +31,9 @@ define([
         var channel = config.channel;
         var Crypto = config.crypto;
         var validateKey = config.validateKey;
+        var owners = config.owners;
+        var password = config.password;
+        var expire = config.expire;
         var readOnly = config.readOnly || false;
         var ChainPad = config.ChainPad || window.ChainPad;
 
@@ -292,10 +295,15 @@ define([
                     });
                 }
 
-                var msg = ['GET_HISTORY', wc.id];
                 // Add the validateKey if we are the channel creator and we have a validateKey
-                msg.push(validateKey);
-                msg.push(lastKnownHash);
+                var cfg = {
+                    validateKey: validateKey,
+                    lastKnownHash: lastKnownHash,
+                    owners: owners,
+                    expire: expire,
+                    password: password
+                };
+                var msg = ['GET_HISTORY', wc.id, cfg];
                 if (hk) { network.sendto(hk, JSON.stringify(msg)); }
             }
             else {
