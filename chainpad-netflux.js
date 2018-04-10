@@ -176,7 +176,8 @@ define([
             msgIn : function(peerId, msg) {
                 msg = msg.replace(/^cp\|([A-Za-z0-9+\/=]+\|)?/, '');
                 try {
-                    var decryptedMsg = Crypto.decrypt(msg, validateKey);
+                    var isHk = peerId.length !== 32;
+                    var decryptedMsg = Crypto.decrypt(msg, validateKey, isHk);
                     messagesHistory.push(decryptedMsg);
                     return decryptedMsg;
                 } catch (err) {
