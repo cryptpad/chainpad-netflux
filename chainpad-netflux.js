@@ -33,6 +33,7 @@ define([
         var validateKey = config.validateKey;
         var readOnly = config.readOnly || false;
         var ChainPad = config.ChainPad || window.ChainPad;
+        var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
 
         // make sure configuration is defined
         config = config || {};
@@ -278,7 +279,7 @@ define([
             }
 
             // Get the channel history
-            if(USE_HISTORY) {
+            if(useHistory) {
                 var hk;
 
                 wc.members.forEach(function (p) {
