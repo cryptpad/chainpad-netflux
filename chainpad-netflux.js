@@ -31,6 +31,9 @@ define([
         var channel = config.channel;
         var Crypto = config.crypto;
         var validateKey = config.validateKey;
+        var owners = config.owners;
+        var password = config.password;
+        var expire = config.expire;
         var readOnly = config.readOnly || false;
         var ChainPad = config.ChainPad || window.ChainPad;
         var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
@@ -45,6 +48,7 @@ define([
         var realtime;
         var network = config.network;
         var lastKnownHash;
+        var historyKeeperChange = [];
 
         var userList = {
             change : [],
@@ -145,7 +149,7 @@ define([
 
             if (!initializing) {
                 if (config.onLocal) {
-                    config.onLocal();
+                    config.onLocal(true);
                 }
             }
 
@@ -171,9 +175,10 @@ define([
         // shim between chainpad and netflux
         chainpadAdapter = {
             msgIn : function(peerId, msg) {
-                msg = msg.replace(/^cp\|/, '');
+                msg = msg.replace(/^cp\|([A-Za-z0-9+\/=]+\|)?/, '');
                 try {
-                    var decryptedMsg = Crypto.decrypt(msg, validateKey);
+                    var isHk = peerId.length !== 32;
+                    var decryptedMsg = Crypto.decrypt(msg, validateKey, isHk);
                     messagesHistory.push(decryptedMsg);
                     return decryptedMsg;
                 } catch (err) {
@@ -185,7 +190,16 @@ define([
                 if (readOnly) { return; }
                 try {
                     var cmsg = Crypto.encrypt(msg);
-                    if (msg.indexOf('[4') === 0) { cmsg = 'cp|' + cmsg; }
+                    if (msg.indexOf('[4') === 0) {
+                        var id = '';
+                        if (window.nacl) {
+                            var hash = window.nacl.hash(window.nacl.util.decodeUTF8(msg));
+                            id = window.nacl.util.encodeBase64(hash.slice(0, 8)) + '|';
+                        } else {
+                            console.log("Checkpoint sent without an ID. Nacl is missing.");
+                        }
+                        cmsg = 'cp|' + id + cmsg;
+                    }
                     return cmsg;
                 } catch (err) {
                     console.log(msg);
@@ -285,12 +299,22 @@ define([
                 wc.members.forEach(function (p) {
                     if (p.length === 16) { hk = p; }
                 });
-                network.historyKeeper = hk;
+                if (network.historyKeeper !== hk) {
+                    network.historyKeeper = hk;
+                    historyKeeperChange.forEach(function (f) {
+                        f(hk);
+                    });
+                }
 
-                var msg = ['GET_HISTORY', wc.id];
                 // Add the validateKey if we are the channel creator and we have a validateKey
-                msg.push(validateKey);
-                msg.push(lastKnownHash);
+                var cfg = {
+                    validateKey: validateKey,
+                    lastKnownHash: lastKnownHash,
+                    owners: owners,
+                    expire: expire,
+                    password: password
+                };
+                var msg = ['GET_HISTORY', wc.id, cfg];
                 if (hk) { network.sendto(hk, JSON.stringify(msg)); }
             }
             else {
@@ -357,6 +381,10 @@ define([
             // pass messages that come out of netflux into our local handler
             if (firstConnection) {
                 toReturn.network = network;
+
+                network.onHistoryKeeperChange = function (todo) {
+                    historyKeeperChange.push(todo);
+                };
 
                 network.on('disconnect', function (reason) {
                     if (isIntentionallyLeaving) { return; }
