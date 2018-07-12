@@ -49,6 +49,7 @@ define([
         var network = config.network;
         var lastKnownHash;
         var historyKeeperChange = [];
+        var metadata = {};
 
         var userList = {
             change : [],
@@ -96,7 +97,8 @@ define([
                     network: network,
                     userList: userList,
                     myId: wc.myID,
-                    leave: wc.leave
+                    leave: wc.leave,
+                    metadata: metadata
                 });
             }
         };
@@ -118,6 +120,9 @@ define([
                 if (parsed.validateKey && parsed.channel) {
                     if (parsed.channel === wc.id && !validateKey) {
                         validateKey = parsed.validateKey;
+                    }
+                    if (parsed.channel === wc.id) {
+                        metadata = parsed;
                     }
                     // We have to return even if it is not the current channel:
                     // we don't want to continue with other channels messages here
