@@ -137,11 +137,20 @@ define([
                     return;
                 }
             }
-            // The history keeper is different for each channel :
-            // no need to check if the message is related to the current channel
             if (peer === hk){
                 // if the peer is the 'history keeper', extract their message
                 var parsed1 = JSON.parse(msg);
+                // First check if it is an error message (EXPIRED/DELETED)
+                if (parsed1.channel === wc.id && parsed1.error) {
+                    if (config.onChannelError) {
+                        config.onChannelError({
+                            channel: wc.id,
+                            error: parsed1.error
+                        });
+                    }
+                    return;
+                }
+
                 msg = parsed1[4];
                 // Check that this is a message for us
                 if (parsed1[3] !== wc.id) { return; }
