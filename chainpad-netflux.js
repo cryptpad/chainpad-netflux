@@ -189,7 +189,7 @@ define([
         // shim between chainpad and netflux
         chainpadAdapter = {
             msgIn : function(peerId, msg) {
-                msg = msg.replace(/^cp\|([A-Za-z0-9+\/=]+\|)?/, '');
+                msg = msg.replace(/^cp\|([A-Za-z0-9+\/=]{0,20}\|)?/, '');
                 try {
                     var isHk = peerId.length !== 32;
                     var decryptedMsg = Crypto.decrypt(msg, validateKey, isHk);
