@@ -48,6 +48,7 @@ define([
         var realtime;
         var network = config.network;
         var lastKnownHash;
+        var lastKnownHistoryKeeper;
         var historyKeeperChange = [];
         var metadata = {};
 
@@ -313,8 +314,9 @@ define([
                 wc.members.forEach(function (p) {
                     if (p.length === 16) { hk = p; }
                 });
-                if (network.historyKeeper !== hk) {
+                if (lastKnownHistoryKeeper !== hk) {
                     network.historyKeeper = hk;
+                    lastKnownHistoryKeeper = hk;
                     historyKeeperChange.forEach(function (f) {
                         f(hk);
                     });
