@@ -25,7 +25,12 @@ define([
 
     var unBencode = function (str) { return str.replace(/^\d+:/, ''); };
 
+    var removeCp = module.exports.removeCp = function (str) {
+        return str.replace(/^cp\|([A-Za-z0-9+\/=]{0,20}\|)?/, '');
+    };
+
     module.exports.start = function (config) {
+        var network = config.network;
         var websocketUrl = config.websocketURL;
         var userName = config.userName;
         var channel = config.channel;
@@ -35,18 +40,16 @@ define([
         var password = config.password;
         var expire = config.expire;
         var readOnly = config.readOnly || false;
-        var ChainPad = config.ChainPad || window.ChainPad;
+        var ChainPad = !config.noChainPad && (config.ChainPad || window.ChainPad);
         var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
+        var stopped = false;
 
         // make sure configuration is defined
         config = config || {};
 
         var initializing = true;
         var toReturn = {};
-        var messagesHistory = [];
-        var chainpadAdapter = {};
         var realtime;
-        var network = config.network;
         var lastKnownHash;
         var lastKnownHistoryKeeper;
         var historyKeeperChange = [];
@@ -63,6 +66,7 @@ define([
         };
 
         var onJoining = function(peer) {
+            if (config.onJoin)  { config.onJoin(peer); }
             if(peer.length !== 32) { return; }
             var list = userList.users;
             var index = list.indexOf(peer);
@@ -72,21 +76,28 @@ define([
             userList.onChange();
         };
 
+        // update UI components to show that one of the other peers has left
+        var onLeaving = function(peer) {
+            if (config.onLeave)  { config.onLeave(peer); }
+            var list = userList.users;
+            var index = list.indexOf(peer);
+            if(index !== -1) {
+                userList.users.splice(index, 1);
+            }
+            userList.onChange();
+        };
+
         var onReady = function(wc, network) {
             // Trigger onReady only if not ready yet. This is important because the history keeper sends a direct
             // message through "network" when it is synced, and it triggers onReady for each channel joined.
             if (!initializing) { return; }
 
-            realtime.start();
+            if (realtime) { realtime.start(); }
 
             if(config.setMyID) {
                 config.setMyID({
                     myID: wc.myID
                 });
-            }
-            // Trigger onJoining with our own Cryptpad username to tell the toolbar that we are synced
-            if (!readOnly) {
-                onJoining(wc.myID);
             }
 
             // we're fully synced
@@ -104,14 +115,26 @@ define([
             }
         };
 
-        var onMessage = function(peer, msg, wc, network, direct) {
+        var onChannelError = function (err, wc) {
+            if (config.onChannelError) {
+                config.onChannelError({
+                    channel: wc.id,
+                    type: err,
+                    loaded: !initializing,
+                    error: err
+                });
+            }
+            if (wc && (err === "EEXPIRED" || err === "EDELETED")) { wc.leave(); }
+        };
+
+        var onMessage = function (peer, msg, wc, network, direct) {
             // unpack the history keeper from the webchannel
             var hk = network.historyKeeper;
+            var isHk = peer === hk;
 
             // Old server
-            if(wc && (msg === 0 || msg === '0')) {
-                onReady(wc, network);
-                return;
+            if (wc && (msg === 0 || msg === '0')) {
+                return void onReady(wc, network);
             }
             if (direct && peer !== hk) {
                 return;
@@ -138,17 +161,12 @@ define([
                     return;
                 }
             }
-            if (peer === hk){
+            if (isHk) {
                 // if the peer is the 'history keeper', extract their message
                 var parsed1 = JSON.parse(msg);
                 // First check if it is an error message (EXPIRED/DELETED)
                 if (parsed1.channel === wc.id && parsed1.error) {
-                    if (config.onChannelError) {
-                        config.onChannelError({
-                            channel: wc.id,
-                            error: parsed1.error
-                        });
-                    }
+                    onChannelError(parsed1.error, wc);
                     return;
                 }
 
@@ -158,11 +176,17 @@ define([
             }
 
             lastKnownHash = msg.slice(0,64);
-            var message = chainpadAdapter.msgIn(peer, msg);
 
-            verbose(message);
+            msg = removeCp(msg);
+            try {
+                msg = Crypto.decrypt(msg, validateKey, isHk);
+            } catch (err) {
+                console.error(err);
+            }
 
-            if (!initializing) {
+            verbose(msg);
+
+            if (initializing) {
                 if (config.onLocal) {
                     config.onLocal(true);
                 }
@@ -171,55 +195,32 @@ define([
             // slice off the bencoded header
             // Why are we getting bencoded stuff to begin with?
             // FIXME this shouldn't be necessary
-            message = unBencode(message);//.slice(message.indexOf(':[') + 1);
+            var message = unBencode(msg);//.slice(message.indexOf(':[') + 1);
 
             // pass the message into Chainpad
-            realtime.message(message);
+            var isCp = /^cp\|/.test(message);
+            if (realtime) { realtime.message(message); }
+            if (config.onMessage) { config.onMessage(message, peer, validateKey, isCp); }
         };
 
-        // update UI components to show that one of the other peers has left
-        var onLeaving = function(peer) {
-            var list = userList.users;
-            var index = list.indexOf(peer);
-            if(index !== -1) {
-                userList.users.splice(index, 1);
-            }
-            userList.onChange();
-        };
-
-        // shim between chainpad and netflux
-        chainpadAdapter = {
-            msgIn : function(peerId, msg) {
-                msg = msg.replace(/^cp\|([A-Za-z0-9+\/=]{0,20}\|)?/, '');
-                try {
-                    var isHk = peerId.length !== 32;
-                    var decryptedMsg = Crypto.decrypt(msg, validateKey, isHk);
-                    messagesHistory.push(decryptedMsg);
-                    return decryptedMsg;
-                } catch (err) {
-                    console.error(err);
-                    return msg;
-                }
-            },
-            msgOut : function(msg) {
-                if (readOnly) { return; }
-                try {
-                    var cmsg = Crypto.encrypt(msg);
-                    if (msg.indexOf('[4') === 0) {
-                        var id = '';
-                        if (window.nacl) {
-                            var hash = window.nacl.hash(window.nacl.util.decodeUTF8(msg));
-                            id = window.nacl.util.encodeBase64(hash.slice(0, 8)) + '|';
-                        } else {
-                            console.log("Checkpoint sent without an ID. Nacl is missing.");
-                        }
-                        cmsg = 'cp|' + id + cmsg;
+        var msgOut = function(msg) {
+            if (readOnly) { return; }
+            try {
+                var cmsg = Crypto.encrypt(msg);
+                if (msg.indexOf('[4') === 0) {
+                    var id = '';
+                    if (window.nacl) {
+                        var hash = window.nacl.hash(window.nacl.util.decodeUTF8(msg));
+                        id = window.nacl.util.encodeBase64(hash.slice(0, 8)) + '|';
+                    } else {
+                        console.log("Checkpoint sent without an ID. Nacl is missing.");
                     }
-                    return cmsg;
-                } catch (err) {
-                    console.log(msg);
-                    throw err;
+                    cmsg = 'cp|' + id + cmsg;
                 }
+                return cmsg;
+            } catch (err) {
+                console.log(msg);
+                throw err;
             }
         };
 
@@ -239,7 +240,7 @@ define([
         // and remove the old ones when reconnecting and keeping the same 'realtime' object
         // See realtime.onMessage below: we call wc.bcast(...) but wc may change
         var wcObject = {};
-        var onOpen = function(wc, network, initialize) {
+        var onOpen = function(wc, network, firstConnection) {
             wcObject.wc = wc;
             channel = wc.id;
 
@@ -253,23 +254,49 @@ define([
             wc.on('join', onJoining);
             wc.on('leave', onLeaving);
 
-            if (initialize) {
-                toReturn.realtime = realtime = createRealtime();
+            if (firstConnection) {
+                wcObject.send = function (message, cb) {
+                    // Filter messages sent by Chainpad to make it compatible with Netflux
+                    message = msgOut(message);
+                    if(message) {
+                        wcObject.wc.bcast(message).then(function() {
+                            cb();
+                        }, function(err) {
+                            // The message has not been sent, display the error.
+                            console.error(err);
+                        });
+                    }
+                };
 
-                realtime._patch = realtime.patch;
-                realtime.patch = function (patch, x, y) {
-                    if (initializing) {
-                        console.error("attempted to change the content before chainpad was synced");
-                    }
-                    return realtime._patch(patch, x, y);
-                };
-                realtime._change = realtime.change;
-                realtime.change = function (offset, count, chars) {
-                    if (initializing) {
-                        console.error("attempted to change the content before chainpad was synced");
-                    }
-                    return realtime._change(offset, count, chars);
-                };
+                if (ChainPad) {
+                    toReturn.realtime = realtime = createRealtime();
+
+                    realtime._patch = realtime.patch;
+                    realtime.patch = function (patch, x, y) {
+                        if (initializing) {
+                            console.error("attempted to change the content before chainpad was synced");
+                        }
+                        return realtime._patch(patch, x, y);
+                    };
+                    realtime._change = realtime.change;
+                    realtime.change = function (offset, count, chars) {
+                        if (initializing) {
+                            console.error("attempted to change the content before chainpad was synced");
+                        }
+                        return realtime._change(offset, count, chars);
+                    };
+
+                    // Sending a message...
+                    realtime.onMessage(wcObject.send);
+
+                    realtime.onPatch(function () {
+                        if (config.onRemote) {
+                            config.onRemote({
+                                realtime: realtime
+                            });
+                        }
+                    });
+                }
 
                 if (config.onInit) {
                     config.onInit({
@@ -278,37 +305,17 @@ define([
                         getLag: network.getLag,
                         userList: userList,
                         network: network,
-                        channel: channel
+                        channel: channel,
                     });
                 }
+            }
 
-                // Sending a message...
-                realtime.onMessage(function(message, cb) {
-                    // Filter messages sent by Chainpad to make it compatible with Netflux
-                    message = chainpadAdapter.msgOut(message);
-                    if(message) {
-                        // Do not remove wcObject, it allows us to use a new 'wc' without changing the handler if we
-                        // want to keep the same chainpad (realtime) object
-                        wcObject.wc.bcast(message).then(function() {
-                            cb();
-                        }, function(err) {
-                            // The message has not been sent, display the error.
-                            console.error(err);
-                        });
-                    }
-                });
-
-                realtime.onPatch(function () {
-                    if (config.onRemote) {
-                        config.onRemote({
-                            realtime: realtime
-                        });
-                    }
-                });
+            if (config.onConnect) {
+                config.onConnect(wc, wcObject.send);
             }
 
             // Get the channel history
-            if(useHistory) {
+            if (useHistory) {
                 var hk;
 
                 wc.members.forEach(function (p) {
@@ -332,9 +339,8 @@ define([
                 };
                 var msg = ['GET_HISTORY', wc.id, cfg];
                 if (hk) { network.sendto(hk, JSON.stringify(msg)); }
-            }
-            else {
-              onReady(wc, network);
+            } else {
+                onReady(wc, network);
             }
         };
 
@@ -359,7 +365,9 @@ define([
         var onConnectError = function (err) {
             if (config.onError) {
                 config.onError({
-                    error: err.type
+                    type: err && (err.type || err),
+                    error: err.type,
+                    loaded: !initializing
                 });
             }
         };
@@ -383,20 +391,27 @@ define([
         /*  Connect to the Netflux network, or fall back to a WebSocket
             in theory this lets us connect to more netflux channels using only
             one network. */
-        var connectTo = function (network) {
+        var connectTo = function (network, first) {
             // join the netflux network, promise to handle opening of the channel
             network.join(channel || null).then(function(wc) {
-                onOpen(wc, network, firstConnection);
-                firstConnection = false;
+                onOpen(wc, network, first);
             }, function(error) {
                 console.error(error);
+                onConnectError(error);
             });
         };
 
         joinSession(network || websocketUrl, function (network) {
             // pass messages that come out of netflux into our local handler
             if (firstConnection) {
+                firstConnection = false;
+
                 toReturn.network = network;
+                toReturn.stop = function () {
+                    var wchan = findChannelById(network.webChannels, channel);
+                    if (wchan) { wchan.leave(''); }
+                    stopped = true;
+                };
 
                 network.onHistoryKeeperChange = function (todo) {
                     historyKeeperChange.push(todo);
@@ -419,6 +434,7 @@ define([
                 });
 
                 network.on('reconnect', function (uid) {
+                    if (stopped) { return; }
                     if (config.onConnectionChange) {
                         config.onConnectionChange({
                             state: true,
@@ -442,15 +458,18 @@ define([
                 });
 
                 network.on('message', function (msg, sender) { // Direct message
+                    if (stopped) { return; }
                     var wchan = findChannelById(network.webChannels, channel);
                     if(wchan) {
-                      onMessage(sender, msg, wchan, network, true);
+                        onMessage(sender, msg, wchan, network, true);
                     }
                 });
             }
 
-            connectTo(network);
-        }, onConnectError);
+            connectTo(network, true);
+        });
+
+        toReturn.stop = function () { stopped = true; };
 
         return toReturn;
     };
