@@ -178,6 +178,7 @@ define([
 
             lastKnownHash = msg.slice(0,64);
 
+            var isCp = /^cp\|/.test(msg);
             msg = removeCp(msg);
             try {
                 msg = Crypto.decrypt(msg, validateKey, isHk);
@@ -187,7 +188,7 @@ define([
 
             verbose(msg);
 
-            if (initializing) {
+            if (!initializing) {
                 if (config.onLocal) {
                     config.onLocal(true);
                 }
@@ -199,7 +200,6 @@ define([
             var message = unBencode(msg);//.slice(message.indexOf(':[') + 1);
 
             // pass the message into Chainpad
-            var isCp = /^cp\|/.test(message);
             if (realtime) { realtime.message(message); }
             if (config.onMessage) { config.onMessage(message, peer, validateKey, isCp, lastKnownHash); }
         };
@@ -265,6 +265,7 @@ define([
                             cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
+                            // TODO check if we can "cb(err);" in chainpad
                             console.error(err);
                         });
                     }
