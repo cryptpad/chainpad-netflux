@@ -30,6 +30,9 @@ define([
     };
 
     module.exports.start = function (config) {
+        // make sure configuration is defined
+        config = config || {};
+
         var network = config.network;
         var websocketUrl = config.websocketURL;
         var userName = config.userName;
@@ -43,14 +46,12 @@ define([
         var ChainPad = !config.noChainPad && (config.ChainPad || window.ChainPad);
         var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
         var stopped = false;
+        var lastKnownHash = config.lastKnownHash;
 
-        // make sure configuration is defined
-        config = config || {};
 
         var initializing = true;
         var toReturn = {};
         var realtime;
-        var lastKnownHash;
         var lastKnownHistoryKeeper;
         var historyKeeperChange = [];
         var metadata = {};
@@ -200,7 +201,7 @@ define([
             // pass the message into Chainpad
             var isCp = /^cp\|/.test(message);
             if (realtime) { realtime.message(message); }
-            if (config.onMessage) { config.onMessage(message, peer, validateKey, isCp); }
+            if (config.onMessage) { config.onMessage(message, peer, validateKey, isCp, lastKnownHash); }
         };
 
         var msgOut = function(msg) {
@@ -260,7 +261,8 @@ define([
                     message = msgOut(message);
                     if(message) {
                         wcObject.wc.bcast(message).then(function() {
-                            cb();
+                            var hash = message.slice(0, 64);
+                            cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
                             console.error(err);
