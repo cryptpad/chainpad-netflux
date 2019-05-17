@@ -204,10 +204,12 @@ define([
             if (config.onMessage) { config.onMessage(message, peer, validateKey, isCp, lastKnownHash); }
         };
 
-        var msgOut = function(msg) {
+        // If our provided crypto uses asymmetric encryption, we need to pass
+        // the recipient's curvePublic key
+        var msgOut = function(msg, curvePublic) {
             if (readOnly) { return; }
             try {
-                var cmsg = Crypto.encrypt(msg);
+                var cmsg = Crypto.encrypt(msg, curvePublic);
                 if (msg.indexOf('[4') === 0) {
                     var id = '';
                     if (window.nacl) {
@@ -256,9 +258,9 @@ define([
             wc.on('leave', onLeaving);
 
             if (firstConnection) {
-                wcObject.send = function (message, cb) {
+                wcObject.send = function (message, cb, curvePublic) {
                     // Filter messages sent by Chainpad to make it compatible with Netflux
-                    message = msgOut(message);
+                    message = msgOut(message, curvePublic);
                     if(message) {
                         wcObject.wc.bcast(message).then(function() {
                             var hash = message.slice(0, 64);
