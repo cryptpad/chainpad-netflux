@@ -189,8 +189,8 @@ define([
             var senderCurve;
             var isString = typeof(msg) === "string";
             if (!isString && msg.content) {
-                msg = msg.content;
                 senderCurve = msg.author;
+                msg = msg.content;
             }
 
             verbose(msg);
