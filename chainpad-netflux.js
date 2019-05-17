@@ -186,6 +186,13 @@ define([
                 console.error(err);
             }
 
+            var senderCurve;
+            var isString = typeof(msg) === "string";
+            if (!isString && msg.content) {
+                msg = msg.content;
+                senderCurve = msg.author;
+            }
+
             verbose(msg);
 
             if (!initializing) {
@@ -197,11 +204,11 @@ define([
             // slice off the bencoded header
             // Why are we getting bencoded stuff to begin with?
             // FIXME this shouldn't be necessary
-            var message = unBencode(msg);//.slice(message.indexOf(':[') + 1);
+            var message = isString ? unBencode(msg) : msg;
 
             // pass the message into Chainpad
-            if (realtime) { realtime.message(message); }
-            if (config.onMessage) { config.onMessage(message, peer, validateKey, isCp, lastKnownHash); }
+            if (realtime && isString) { realtime.message(message); }
+            if (config.onMessage) { config.onMessage(message, peer, validateKey, isCp, lastKnownHash, senderCurve); }
         };
 
         // If our provided crypto uses asymmetric encryption, we need to pass
