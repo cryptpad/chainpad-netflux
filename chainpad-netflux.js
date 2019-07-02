@@ -413,6 +413,10 @@ define([
             });
         };
 
+        toReturn.stop = function () {
+            stopped = true;
+        };
+
         joinSession(network || websocketUrl, function (network) {
             // pass messages that come out of netflux into our local handler
             if (firstConnection) {
@@ -480,8 +484,6 @@ define([
 
             connectTo(network, true);
         });
-
-        toReturn.stop = function () { stopped = true; };
 
         return toReturn;
     };
