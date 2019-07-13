@@ -38,23 +38,22 @@ define([
         var userName = config.userName;
         var channel = config.channel;
         var Crypto = config.crypto;
-        var validateKey = config.validateKey;
-        var owners = config.owners;
-        var password = config.password;
-        var expire = config.expire;
         var readOnly = config.readOnly || false;
         var ChainPad = !config.noChainPad && (config.ChainPad || window.ChainPad);
         var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
         var stopped = false;
         var lastKnownHash = config.lastKnownHash;
 
+        var metadata = config.metadata || {};
+        var validateKey = metadata.validateKey = config.validateKey || metadata.validateKey;
+        metadata.owners = config.owners || metadata.owners;
+        metadata.expire = config.expire || metadata.expire;
 
         var initializing = true;
         var toReturn = {};
         var realtime;
         var lastKnownHistoryKeeper;
         var historyKeeperChange = [];
-        var metadata = {};
 
         var userList = {
             change : [],
@@ -343,11 +342,8 @@ define([
 
                 // Add the validateKey if we are the channel creator and we have a validateKey
                 var cfg = {
-                    validateKey: validateKey,
                     lastKnownHash: lastKnownHash,
-                    owners: owners,
-                    expire: expire,
-                    password: password
+                    metadata: metadata
                 };
                 var msg = ['GET_HISTORY', wc.id, cfg];
                 if (hk) { network.sendto(hk, JSON.stringify(msg)); }
