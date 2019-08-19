@@ -264,12 +264,12 @@ define([
             wc.on('join', onJoining);
             wc.on('leave', onLeaving);
 
-            wcObject.stop = function (kill) {
+            wcObject.stop = function () {
                 wc.off('message', onMessageHandler);
                 wc.off('join', onJoining);
                 wc.off('leave', onLeaving);
                 wc.leave();
-                if (kill && realtime) {
+                if (realtime) {
                     realtime.abort();
                 }
             };
