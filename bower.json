@@ -21,6 +21,6 @@
     "tests"
   ],
   "dependencies": {
-    "netflux-websocket": "^0.1.19"
+    "netflux-websocket": "^0.1.20"
   }
 }
