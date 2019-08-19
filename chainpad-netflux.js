@@ -257,11 +257,22 @@ define([
             wc.members.forEach(onJoining);
 
             // Add the handlers to the WebChannel
-            wc.on('message', function (msg, sender) { //Channel msg
+            var onMessageHandler = function (msg, sender) { //Channel msg
                 onMessage(sender, msg, wc, network);
-            });
+            };
+            wc.on('message', onMessageHandler);
             wc.on('join', onJoining);
             wc.on('leave', onLeaving);
+
+            wcObject.stop = function (kill) {
+                wc.off('message', onMessageHandler);
+                wc.off('join', onJoining);
+                wc.off('leave', onLeaving);
+                wc.leave();
+                if (kill && realtime) {
+                    realtime.abort();
+                }
+            };
 
             if (firstConnection) {
                 wcObject.send = function (message, cb, curvePublic) {
@@ -473,6 +484,9 @@ define([
 
                 toReturn.network = network;
                 toReturn.stop = function () {
+                    if (wcObject && wcObject.stop) {
+                        wcObject.stop();
+                    }
                     var wchan = findChannelById(network.webChannels, channel);
                     if (wchan) { wchan.leave(''); }
                     network.off('disconnect', onDisconnectHandler);
