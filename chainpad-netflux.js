@@ -402,6 +402,10 @@ define([
         var connectTo = function (network, first) {
             // join the netflux network, promise to handle opening of the channel
             network.join(channel || null).then(function(wc) {
+                if (stopped) {
+                    try { wc.leave(); } catch (e) {}
+                    return;
+                }
                 onOpen(wc, network, first);
             }, function(error) {
                 console.error(error);
@@ -418,18 +422,8 @@ define([
             if (firstConnection) {
                 firstConnection = false;
 
-                toReturn.network = network;
-                toReturn.stop = function () {
-                    var wchan = findChannelById(network.webChannels, channel);
-                    if (wchan) { wchan.leave(''); }
-                    stopped = true;
-                };
-
-                network.onHistoryKeeperChange = function (todo) {
-                    historyKeeperChange.push(todo);
-                };
-
-                network.on('disconnect', function (reason) {
+                if (stopped) { return; }
+                var onDisconnectHandler = function (reason) {
                     if (isIntentionallyLeaving) { return; }
                     if (reason === "network.disconnect() called") { return; }
                     if (config.onConnectionChange) {
@@ -443,10 +437,8 @@ define([
                             reason: reason
                         });
                     }
-                });
-
-                network.on('reconnect', function (uid) {
-                    if (stopped) { return; }
+                };
+                var onReconnectHandler = function (uid) {
                     if (config.onConnectionChange) {
                         config.onConnectionChange({
                             state: true,
@@ -467,15 +459,33 @@ define([
                         }
                         afterReconnecting();
                     }
-                });
-
-                network.on('message', function (msg, sender) { // Direct message
-                    if (stopped) { return; }
+                };
+                var onMessageHandler = function (msg, sender) { // Direct message
                     var wchan = findChannelById(network.webChannels, channel);
                     if(wchan) {
                         onMessage(sender, msg, wchan, network, true);
                     }
-                });
+                };
+
+                network.on('disconnect', onDisconnectHandler);
+                network.on('reconnect', onReconnectHandler);
+                network.on('message', onMessageHandler);
+
+                toReturn.network = network;
+                toReturn.stop = function () {
+                    var wchan = findChannelById(network.webChannels, channel);
+                    if (wchan) { wchan.leave(''); }
+                    network.off('disconnect', onDisconnectHandler);
+                    network.off('reconnect', onReconnectHandler);
+                    network.off('message', onMessageHandler);
+                    // TODO chainpad.kill?
+                    stopped = true;
+                };
+
+                network.onHistoryKeeperChange = function (todo) {
+                    historyKeeperChange.push(todo);
+                };
+
             }
 
             connectTo(network, true);
