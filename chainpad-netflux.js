@@ -147,6 +147,9 @@ define([
                     }
                     if (parsed.channel === wc.id) {
                         metadata = parsed;
+                        if (config.onMetadataUpdate && !initializing) {
+                            config.onMetadataUpdate(metadata);
+                        }
                     }
                     // We have to return even if it is not the current channel:
                     // we don't want to continue with other channels messages here
