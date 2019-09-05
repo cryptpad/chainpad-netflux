@@ -14,22 +14,21 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-define([
-    '/bower_components/netflux-websocket/netflux-client.js'
-], function (Netflux) {
+(function () {
+var factory = function (Netflux) {
     var USE_HISTORY = true;
-    var module = { exports: {} };
+    var CPNF = {};
 
     var verbose = function (x) { console.log(x); };
     verbose = function () {}; // comment out to enable verbose logging
 
     var unBencode = function (str) { return str.replace(/^\d+:/, ''); };
 
-    var removeCp = module.exports.removeCp = function (str) {
+    var removeCp = CPNF.removeCp = function (str) {
         return str.replace(/^cp\|([A-Za-z0-9+\/=]{0,20}\|)?/, '');
     };
 
-    module.exports.start = function (config) {
+    CPNF.start = function (config) {
         // make sure configuration is defined
         config = config || {};
 
@@ -510,5 +509,16 @@ define([
 
         return toReturn;
     };
-    return module.exports;
-});
+    return CPNF;
+};
+
+    if (typeof(module) !== 'undefined' && module.exports) {
+        module.exports = factory(require("netflux-websocket"));
+    } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
+        define([
+            '/bower_components/netflux-websocket/netflux-client.js'
+        ], factory);
+    } else {
+        // I'm not gonna bother supporting any other kind of instanciation
+    }
+}());

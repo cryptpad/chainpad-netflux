@@ -19,5 +19,8 @@
   "homepage": "https://github.com/xwiki-labs/chainpad-netflux#readme",
   "devDependencies": {
     "jshint": "^2.9.4"
+  },
+  "dependencies": {
+    "netflux-websocket": "^0.1.20"
   }
 }
