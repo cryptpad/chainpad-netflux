@@ -367,9 +367,11 @@ var factory = function (Netflux) {
 
         // Set a flag to avoid calling onAbort or onConnectionChange when the user is leaving the page
         var isIntentionallyLeaving = false;
-        window.addEventListener("beforeunload", function () {
-            isIntentionallyLeaving = true;
-        });
+        if (typeof(window) !== 'undefined') {
+            window.addEventListener("beforeunload", function () {
+                isIntentionallyLeaving = true;
+            });
+        }
 
         var findChannelById = function(webChannels, channelId) {
             var webChannel;
