@@ -124,7 +124,9 @@ define([
                     error: err
                 });
             }
-            if (wc && (err === "EEXPIRED" || err === "EDELETED")) { wc.leave(); }
+            if (typeof (toReturn.stop) === "function" && (err === "EEXPIRED" || err === "EDELETED")) {
+                toReturn.stop();
+            }
         };
 
         var onMessage = function (peer, msg, wc, network, direct) {
