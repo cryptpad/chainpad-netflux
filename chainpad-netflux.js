@@ -427,7 +427,6 @@ var factory = function (Netflux) {
                 }
                 onOpen(wc, network, first);
             }, function(error) {
-                console.error(error);
                 onConnectError(error);
             });
         };
