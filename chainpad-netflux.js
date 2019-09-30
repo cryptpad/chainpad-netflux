@@ -125,7 +125,9 @@ define([
                 });
             }
             if (typeof (toReturn.stop) === "function" && (err === "EEXPIRED" || err === "EDELETED")) {
-                toReturn.stop();
+                try {
+                    toReturn.stop();
+                } catch (e) {}
             }
         };
 
