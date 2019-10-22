@@ -49,7 +49,14 @@ var factory = function (Netflux) {
         metadata.expire = config.expire || metadata.expire;
 
         var initializing = true;
-        var toReturn = {};
+        var toReturn = {
+            setReadOnly: function (state, crypto) {
+                readOnly = state;
+                if (crypto) {
+                    Crypto = crypto;
+                }
+            }
+        };
         var realtime;
         var lastKnownHistoryKeeper;
         var historyKeeperChange = [];
