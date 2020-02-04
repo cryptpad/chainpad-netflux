@@ -43,6 +43,8 @@ var factory = function (Netflux) {
         var stopped = false;
         var lastKnownHash = config.lastKnownHash;
 
+        var txid = Math.floor(Math.random() * 1000000);
+
         var metadata = config.metadata || {};
         var validateKey = metadata.validateKey = config.validateKey || metadata.validateKey;
         metadata.owners = config.owners || metadata.owners;
@@ -151,6 +153,10 @@ var factory = function (Netflux) {
             }
             if (direct) {
                 var parsed = JSON.parse(msg);
+
+                // If there is a txid, make sure it's ours or abort
+                if (parsed.txid && parsed.txid !== txid) { return; }
+
                 if (parsed.validateKey && parsed.channel) {
                     if (parsed.channel === wc.id && !validateKey) {
                         validateKey = parsed.validateKey;
@@ -177,6 +183,12 @@ var factory = function (Netflux) {
             if (isHk) {
                 // if the peer is the 'history keeper', extract their message
                 var parsed1 = JSON.parse(msg);
+
+                // If there is a txid, make sure it's ours or abort
+                if (Array.isArray(parsed1) && parsed1[0] && parsed1[0] !== txid) {
+                    return;
+                }
+
                 // First check if it is an error message (EXPIRED/DELETED)
                 if (parsed1.channel === wc.id && parsed1.error) {
                     onChannelError(parsed1.error, wc);
@@ -366,6 +378,7 @@ var factory = function (Netflux) {
 
                 // Add the validateKey if we are the channel creator and we have a validateKey
                 var cfg = {
+                    txid: txid,
                     lastKnownHash: lastKnownHash,
                     metadata: metadata
                 };
