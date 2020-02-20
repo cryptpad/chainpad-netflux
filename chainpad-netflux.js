@@ -412,7 +412,8 @@ var factory = function (Netflux) {
         var onConnectError = function (err) {
             if (config.onError) {
                 config.onError({
-                    type: err && (err.type || err),
+                    type: err.type || err,
+                    message: err.message,
                     error: err.type,
                     loaded: !initializing
                 });
