@@ -123,16 +123,17 @@ var factory = function (Netflux) {
             }
         };
 
-        var onChannelError = function (err, wc) {
+        var onChannelError = function (parsed, wc) {
             if (config.onChannelError) {
                 config.onChannelError({
                     channel: wc.id,
-                    type: err,
+                    type: parsed.error,
                     loaded: !initializing,
-                    error: err
+                    error: parsed.error,
+                    message: parsed.message,
                 });
             }
-            if (typeof (toReturn.stop) === "function" && (err === "EEXPIRED" || err === "EDELETED")) {
+            if (typeof (toReturn.stop) === "function") {
                 try {
                     toReturn.stop();
                 } catch (e) {}
@@ -191,7 +192,7 @@ var factory = function (Netflux) {
 
                 // First check if it is an error message (EXPIRED/DELETED)
                 if (parsed1.channel === wc.id && parsed1.error) {
-                    onChannelError(parsed1.error, wc);
+                    onChannelError(parsed1, wc);
                     return;
                 }
 
