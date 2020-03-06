@@ -441,6 +441,7 @@ var factory = function (Netflux) {
             in theory this lets us connect to more netflux channels using only
             one network. */
         var connectTo = function (network, first) {
+            if (stopped) { return; }
             // join the netflux network, promise to handle opening of the channel
             network.join(channel || null).then(function(wc) {
                 if (stopped) {
@@ -449,6 +450,16 @@ var factory = function (Netflux) {
                 }
                 onOpen(wc, network, first);
             }, function(error) {
+                // If there is an allow list and you're not authenticated yet,
+                // tyr to authenticate from CryptPad
+                if (error && error.type === 'ERESTRICTED' && Array.isArray(error.message)) {
+                    if (config.onRejected) {
+                        return void config.onRejected(error.message, function (err) {
+                            if (err) { return void onConnectError(error); }
+                            connectTo(network, first);
+                        });
+                    }
+                }
                 onConnectError(error);
             });
         };
@@ -517,7 +528,11 @@ var factory = function (Netflux) {
                         wcObject.stop();
                     }
                     var wchan = findChannelById(network.webChannels, channel);
-                    if (wchan) { wchan.leave(''); }
+                    if (wchan) {
+                        try {
+                            wchan.leave('');
+                        } catch (e) {}
+                    }
                     network.off('disconnect', onDisconnectHandler);
                     network.off('reconnect', onReconnectHandler);
                     network.off('message', onMessageHandler);
