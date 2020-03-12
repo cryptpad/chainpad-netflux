@@ -307,6 +307,7 @@ var factory = function (Netflux) {
                     if(message) {
                         wcObject.wc.bcast(message).then(function() {
                             var hash = message.slice(0, 64);
+                            lastKnownHash = hash;
                             cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
