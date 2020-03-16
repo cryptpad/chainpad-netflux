@@ -59,6 +59,7 @@ var factory = function (Netflux) {
                 }
             }
         };
+        var joinSession = function () {};
         var realtime;
         var lastKnownHistoryKeeper;
         var historyKeeperChange = [];
@@ -132,6 +133,12 @@ var factory = function (Netflux) {
                     error: parsed.error,
                     message: parsed.message,
                 });
+            }
+            if (parsed.error === "EUNKNOWN") { // Invalid last known hash
+                lastKnownHash = undefined;
+                if (wc) { wc.leave(); }
+                joinSession(network, connectTo);
+                return;
             }
             if (typeof (toReturn.stop) === "function") {
                 try {
@@ -422,7 +429,7 @@ var factory = function (Netflux) {
             }
         };
 
-        var joinSession = function (endPoint, cb) {
+        joinSession = function (endPoint, cb) {
             // a websocket URL has been provided
             // connect to it with Netflux.
             if (typeof(endPoint) === 'string') {
@@ -469,7 +476,8 @@ var factory = function (Netflux) {
             stopped = true;
         };
 
-        joinSession(network || websocketUrl, function (network) {
+        joinSession(network || websocketUrl, function (_network) {
+            network = network || _network;
             // pass messages that come out of netflux into our local handler
             if (firstConnection) {
                 firstConnection = false;
