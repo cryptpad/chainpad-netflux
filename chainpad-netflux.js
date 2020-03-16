@@ -42,6 +42,7 @@ var factory = function (Netflux) {
         var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
         var stopped = false;
         var lastKnownHash = config.lastKnownHash;
+        var lastSent;
 
         var txid = Math.floor(Math.random() * 1000000);
 
@@ -181,6 +182,9 @@ var factory = function (Netflux) {
                 }
                 if (parsed.state && parsed.state === 1 && parsed.channel) {
                     if (parsed.channel === wc.id) {
+                        if (lastSent && typeof(lastSent.cb) === "function") {
+                            lastSent.cb('FAILED');
+                        }
                         onReady(wc, network);
                     }
                     // We have to return even if it is not the current channel:
@@ -209,6 +213,12 @@ var factory = function (Netflux) {
             }
 
             lastKnownHash = msg.slice(0,64);
+
+            if (lastSent && lastKnownHash === lastSent.hash && typeof(lastSent.cb) === "function") {
+                lastSent.cb(null, lastSent.hash);
+                lastSent = undefined;
+                return;
+            }
 
             var isCp = /^cp\|/.test(msg);
             msg = removeCp(msg);
@@ -312,9 +322,14 @@ var factory = function (Netflux) {
                     // Filter messages sent by Chainpad to make it compatible with Netflux
                     message = msgOut(message, curvePublic);
                     if(message) {
+                        var hash = message.slice(0, 64);
+                        lastSent = {
+                            hash: hash,
+                            cb: cb
+                        };
                         wcObject.wc.bcast(message).then(function() {
-                            var hash = message.slice(0, 64);
                             lastKnownHash = hash;
+                            lastSent = undefined;
                             cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
