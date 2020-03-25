@@ -301,9 +301,9 @@ var factory = function (Netflux) {
             };
 
             if (firstConnection) {
-                wcObject.send = function (message, cb, curvePublic) {
+                wcObject.send = function (_message, cb, curvePublic) {
                     // Filter messages sent by Chainpad to make it compatible with Netflux
-                    message = msgOut(message, curvePublic);
+                    message = msgOut(_message, curvePublic);
                     if(message) {
                         wcObject.wc.bcast(message).then(function() {
                             var hash = message.slice(0, 64);
@@ -311,8 +311,20 @@ var factory = function (Netflux) {
                             cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
-                            // TODO check if we can "cb(err);" in chainpad
                             console.error(err);
+
+                            if (err && (err.type === 'enoent' || err.type === 'ENOENT')) {
+                                // Channel not in memory on the server: join again
+                                wcObject.wc.leave();
+                                if (stopped) { return; }
+                                network.join(channel).then(function (wc) {
+                                    onOpen(wc, network, false);
+                                    wcObject.send(_message, cb, curvePublic);
+                                });
+                            } else {
+                                // Otherwise tell cryptpad that your message was not sent
+                                cb((err && err.type) || err);
+                            }
                         });
                     }
                 };
