@@ -42,6 +42,7 @@ var factory = function (Netflux) {
         var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
         var stopped = false;
         var lastKnownHash = config.lastKnownHash;
+        var lastSent;
 
         var txid = Math.floor(Math.random() * 1000000);
 
@@ -59,6 +60,7 @@ var factory = function (Netflux) {
                 }
             }
         };
+        var joinSession = function () {};
         var realtime;
         var lastKnownHistoryKeeper;
         var historyKeeperChange = [];
@@ -133,6 +135,12 @@ var factory = function (Netflux) {
                     message: parsed.message,
                 });
             }
+            if (parsed.error === "EUNKNOWN") { // Invalid last known hash
+                lastKnownHash = undefined;
+                if (wc) { wc.leave(); }
+                joinSession(network, connectTo);
+                return;
+            }
             if (typeof (toReturn.stop) === "function") {
                 try {
                     toReturn.stop();
@@ -174,6 +182,9 @@ var factory = function (Netflux) {
                 }
                 if (parsed.state && parsed.state === 1 && parsed.channel) {
                     if (parsed.channel === wc.id) {
+                        if (lastSent && typeof(lastSent.cb) === "function") {
+                            lastSent.cb('FAILED');
+                        }
                         onReady(wc, network);
                     }
                     // We have to return even if it is not the current channel:
@@ -202,6 +213,12 @@ var factory = function (Netflux) {
             }
 
             lastKnownHash = msg.slice(0,64);
+
+            if (lastSent && lastKnownHash === lastSent.hash && typeof(lastSent.cb) === "function") {
+                lastSent.cb(null, lastSent.hash);
+                lastSent = undefined;
+                return;
+            }
 
             var isCp = /^cp\|/.test(msg);
             msg = removeCp(msg);
@@ -305,9 +322,14 @@ var factory = function (Netflux) {
                     // Filter messages sent by Chainpad to make it compatible with Netflux
                     message = msgOut(_message, curvePublic);
                     if(message) {
+                        var hash = message.slice(0, 64);
+                        lastSent = {
+                            hash: hash,
+                            cb: cb
+                        };
                         wcObject.wc.bcast(message).then(function() {
-                            var hash = message.slice(0, 64);
                             lastKnownHash = hash;
+                            lastSent = undefined;
                             cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
@@ -434,7 +456,7 @@ var factory = function (Netflux) {
             }
         };
 
-        var joinSession = function (endPoint, cb) {
+        joinSession = function (endPoint, cb) {
             // a websocket URL has been provided
             // connect to it with Netflux.
             if (typeof(endPoint) === 'string') {
@@ -481,7 +503,8 @@ var factory = function (Netflux) {
             stopped = true;
         };
 
-        joinSession(network || websocketUrl, function (network) {
+        joinSession(network || websocketUrl, function (_network) {
+            network = network || _network;
             // pass messages that come out of netflux into our local handler
             if (firstConnection) {
                 firstConnection = false;
