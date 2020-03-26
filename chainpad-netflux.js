@@ -64,6 +64,47 @@ var factory = function (Netflux) {
         var realtime;
         var lastKnownHistoryKeeper;
         var historyKeeperChange = [];
+        var wcObject = {
+            send: function () {}
+        };
+
+        var createRealtime = function() {
+            var realtime = ChainPad.create({
+                userName: userName,
+                initialState: config.initialState,
+                transformFunction: config.transformFunction,
+                patchTransformer: config.patchTransformer,
+                validateContent: config.validateContent,
+                avgSyncMilliseconds: config.avgSyncMilliseconds,
+                logLevel: typeof(config.logLevel) !== 'undefined'? config.logLevel : 1
+            });
+            realtime._patch = realtime.patch;
+            realtime.patch = function (patch, x, y) {
+                if (initializing) {
+                    console.error("attempted to change the content before chainpad was synced");
+                }
+                return realtime._patch(patch, x, y);
+            };
+            realtime._change = realtime.change;
+            realtime.change = function (offset, count, chars) {
+                if (initializing) {
+                    console.error("attempted to change the content before chainpad was synced");
+                }
+                return realtime._change(offset, count, chars);
+            };
+
+            // Sending a message...
+            realtime.onMessage(wcObject.send);
+
+            realtime.onPatch(function () {
+                if (config.onRemote) {
+                    config.onRemote({
+                        realtime: realtime
+                    });
+                }
+            });
+            return realtime;
+        };
 
         var userList = {
             change : [],
@@ -138,6 +179,11 @@ var factory = function (Netflux) {
             if (parsed.error === "EUNKNOWN") { // Invalid last known hash
                 lastKnownHash = undefined;
                 if (wc) { wc.leave(); }
+                // We're going to rejoin the channel without lastKnownHash.
+                // Kill chainpad and make a new one to start fresh.
+                if (ChainPad) {
+                    toReturn.realtime = realtime = createRealtime();
+                }
                 joinSession(network, connectTo);
                 return;
             }
@@ -276,22 +322,9 @@ var factory = function (Netflux) {
             }
         };
 
-        var createRealtime = function() {
-            return ChainPad.create({
-                userName: userName,
-                initialState: config.initialState,
-                transformFunction: config.transformFunction,
-                patchTransformer: config.patchTransformer,
-                validateContent: config.validateContent,
-                avgSyncMilliseconds: config.avgSyncMilliseconds,
-                logLevel: typeof(config.logLevel) !== 'undefined'? config.logLevel : 1
-            });
-        };
-
         // We use an object to store the webchannel so that we don't have to push new handlers to chainpad
         // and remove the old ones when reconnecting and keeping the same 'realtime' object
         // See realtime.onMessage below: we call wc.bcast(...) but wc may change
-        var wcObject = {};
         var onOpen = function(wc, network, firstConnection) {
             wcObject.wc = wc;
             channel = wc.id;
@@ -357,32 +390,6 @@ var factory = function (Netflux) {
 
                 if (ChainPad) {
                     toReturn.realtime = realtime = createRealtime();
-
-                    realtime._patch = realtime.patch;
-                    realtime.patch = function (patch, x, y) {
-                        if (initializing) {
-                            console.error("attempted to change the content before chainpad was synced");
-                        }
-                        return realtime._patch(patch, x, y);
-                    };
-                    realtime._change = realtime.change;
-                    realtime.change = function (offset, count, chars) {
-                        if (initializing) {
-                            console.error("attempted to change the content before chainpad was synced");
-                        }
-                        return realtime._change(offset, count, chars);
-                    };
-
-                    // Sending a message...
-                    realtime.onMessage(wcObject.send);
-
-                    realtime.onPatch(function () {
-                        if (config.onRemote) {
-                            config.onRemote({
-                                realtime: realtime
-                            });
-                        }
-                    });
                 }
 
                 if (config.onInit) {
