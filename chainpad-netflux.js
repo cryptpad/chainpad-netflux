@@ -316,7 +316,7 @@ var factory = function (Netflux) {
                             if (err && (err.type === 'enoent' || err.type === 'ENOENT')) {
                                 // Channel not in memory on the server: join again
                                 wcObject.wc.leave();
-                                if (stopped) { return; }
+                                if (stopped) { return void cb('STOPPED'); }
                                 network.join(channel).then(function (wc) {
                                     onOpen(wc, network, false);
                                     wcObject.send(_message, cb, curvePublic);
