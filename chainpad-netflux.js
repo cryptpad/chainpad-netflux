@@ -375,6 +375,7 @@ var factory = function (Netflux) {
                                     lastSent = undefined;
                                     return void cb('STOPPED');
                                 }
+                                initializing = true;
                                 network.join(channel).then(function (wc) {
                                     onOpen(wc, network, false);
                                     wcObject.send(_message, cb, curvePublic);
