@@ -318,6 +318,7 @@ var factory = function (Netflux) {
                                          isCp, lastKnownHash, senderCurve);
                     }
                 } catch (e) {
+                    console.error(e);
                 }
             };
 
