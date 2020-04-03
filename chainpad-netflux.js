@@ -42,7 +42,7 @@ var factory = function (Netflux) {
         var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
         var stopped = false;
         var lastKnownHash = config.lastKnownHash;
-        var lastSent;
+        var lastSent = {};
 
         var txid = Math.floor(Math.random() * 1000000);
 
@@ -228,9 +228,14 @@ var factory = function (Netflux) {
                 }
                 if (parsed.state && parsed.state === 1 && parsed.channel) {
                     if (parsed.channel === wc.id) {
-                        if (lastSent && typeof(lastSent.cb) === "function") {
-                            lastSent.cb('FAILED');
-                        }
+                        // If some messages were sent locally but not received by the server,
+                        // callback with an error
+                        Object.keys(lastSent).forEach(function (h) {
+                            if (typeof(lastSent[h]) === "function") {
+                                lastSent[h]('FAILED');
+                            }
+                        });
+                        lastSent = {};
                         onReady(wc, network);
                     }
                     // We have to return even if it is not the current channel:
@@ -260,9 +265,9 @@ var factory = function (Netflux) {
 
             lastKnownHash = msg.slice(0,64);
 
-            if (lastSent && lastKnownHash === lastSent.hash && typeof(lastSent.cb) === "function") {
-                lastSent.cb(null, lastSent.hash);
-                lastSent = undefined;
+            if (typeof(lastSent[lastKnownHash]) === "function") {
+                lastSent[lastKnownHash](null, lastKnownHash);
+                delete lastSent[lastKnownHash];
                 return;
             }
 
@@ -356,13 +361,10 @@ var factory = function (Netflux) {
                     message = msgOut(_message, curvePublic);
                     if(message) {
                         var hash = message.slice(0, 64);
-                        lastSent = {
-                            hash: hash,
-                            cb: cb
-                        };
+                        lastSent[hash] = cb;
                         wcObject.wc.bcast(message).then(function() {
                             lastKnownHash = hash;
-                            lastSent = undefined;
+                            delete lastSent[hash];
                             cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
@@ -372,7 +374,7 @@ var factory = function (Netflux) {
                                 // Channel not in memory on the server: join again
                                 wcObject.wc.leave();
                                 if (stopped) {
-                                    lastSent = undefined;
+                                    delete lastSent[hash];
                                     return void cb('STOPPED');
                                 }
                                 initializing = true;
@@ -382,7 +384,7 @@ var factory = function (Netflux) {
                                 });
                             } else {
                                 // Otherwise tell cryptpad that your message was not sent
-                                lastSent = undefined;
+                                delete lastSent[hash];
                                 cb((err && err.type) || err);
                             }
                         });
