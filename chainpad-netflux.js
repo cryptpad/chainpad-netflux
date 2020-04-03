@@ -43,6 +43,7 @@ var factory = function (Netflux) {
         var stopped = false;
         var lastKnownHash = config.lastKnownHash;
         var lastSent = {};
+        var messagesQueue = [];
 
         var txid = Math.floor(Math.random() * 1000000);
 
@@ -163,6 +164,14 @@ var factory = function (Netflux) {
                     leave: wc.leave,
                     metadata: metadata
                 });
+            }
+
+            if (messagesQueue.length) {
+                messagesQueue.forEach(function (f) {
+                    if (typeof(f) !== "function") { return; }
+                    f();
+                });
+                messagesQueue = [];
             }
         };
 
@@ -299,9 +308,28 @@ var factory = function (Netflux) {
             // FIXME this shouldn't be necessary
             var message = isString ? unBencode(msg) : msg;
 
-            // pass the message into Chainpad
-            if (realtime && isString) { realtime.message(message); }
-            if (config.onMessage) { config.onMessage(message, peer, validateKey, isCp, lastKnownHash, senderCurve); }
+            var apply = function () {
+                // pass the message into Chainpad
+                // don't block chainpad netflux if one handler throws
+                try {
+                    if (realtime && isString) { realtime.message(message); }
+                    if (config.onMessage) {
+                        config.onMessage(message, peer, validateKey,
+                                         isCp, lastKnownHash, senderCurve);
+                    }
+                } catch (e) {
+                }
+            };
+
+            // If this is a message broadcasted to this channel by another user AND
+            // if we're not fully synced yet, put the message in a queue
+            if (initializing && peer !== hk) {
+                messagesQueue.push(apply);
+                return;
+            }
+
+            // Otherwise apply it directly
+            apply();
         };
 
         // If our provided crypto uses asymmetric encryption, we need to pass
@@ -432,6 +460,9 @@ var factory = function (Netflux) {
                     lastKnownHash: lastKnownHash,
                     metadata: metadata
                 };
+                // Reset the queue when asking for history: the pending messages will be included
+                // in the new history
+                messagesQueue = [];
                 var msg = ['GET_HISTORY', wc.id, cfg];
                 if (hk) { network.sendto(hk, JSON.stringify(msg)); }
             } else {
