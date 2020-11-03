@@ -45,6 +45,9 @@ var factory = function (Netflux) {
         var lastSent = {};
         var messagesQueue = [];
 
+        var Cache = config.Cache;
+        var channelCache;
+
         var txid = Math.floor(Math.random() * 1000000);
 
         var metadata = config.metadata || {};
@@ -79,6 +82,17 @@ var factory = function (Netflux) {
                 avgSyncMilliseconds: config.avgSyncMilliseconds,
                 logLevel: typeof(config.logLevel) !== 'undefined'? config.logLevel : 1
             });
+
+            // If we have a cache, use it: if this cache is deprecated, ChainPad's pruning system
+            // will automatically delete it from memory
+            // XXX WIP
+            if (Array.isArray(channelCache)) {
+                console.warn(JSON.stringify(channelCache, 0, 2));
+                channelCache.forEach(function (obj) {
+                    realtime.message(obj.patch);
+                });
+            }
+
             realtime._patch = realtime.patch;
             realtime.patch = function (patch, x, y) {
                 if (initializing) {
@@ -104,6 +118,7 @@ var factory = function (Netflux) {
                     });
                 }
             });
+
             return realtime;
         };
 
@@ -191,6 +206,10 @@ var factory = function (Netflux) {
                 // We're going to rejoin the channel without lastKnownHash.
                 // Kill chainpad and make a new one to start fresh.
                 if (ChainPad) {
+                    if (Cache) {
+                        channelCache = [];
+                        Cache.clearChannel(channel);
+                    }
                     toReturn.realtime = realtime = createRealtime();
                 }
                 joinSession(network, connectTo);
@@ -201,6 +220,20 @@ var factory = function (Netflux) {
                     toReturn.stop();
                 } catch (e) {}
             }
+        };
+
+        var fillCache = function (obj) {
+            if (!Cache) { return; }
+            if (channelCache.length &&
+                channelCache[channelCache.length - 1].hash === obj.hash) { return; }
+            channelCache.push(obj);
+            var i = channelCache.length;
+            console.error(i, channelCache);
+            Cache.storeCache(channel, validateKey, channelCache, function (err) {
+                // XXX WIP: invalidate cache if err?
+                if (err) { return void console.error(err); }
+                console.warn(i);
+            });
         };
 
         var onMessage = function (peer, msg, wc, network, direct) {
@@ -285,6 +318,7 @@ var factory = function (Netflux) {
             try {
                 msg = Crypto.decrypt(msg, validateKey, isHk);
             } catch (err) {
+                console.error(msg, validateKey, channel);
                 console.error(err);
             }
 
@@ -317,6 +351,12 @@ var factory = function (Netflux) {
                         config.onMessage(message, peer, validateKey,
                                          isCp, lastKnownHash, senderCurve);
                     }
+                    fillCache({
+                        patch: message,
+                        hash: lastKnownHash,
+                        isCheckpoint: isCp,
+                        time: parsed1[5]
+                    });
                 } catch (e) {
                     console.error(e);
                 }
@@ -394,6 +434,13 @@ var factory = function (Netflux) {
                         wcObject.wc.bcast(message).then(function() {
                             lastKnownHash = hash;
                             delete lastSent[hash];
+                            console.log(message);
+                            fillCache({
+                                patch: _message,
+                                hash: hash,
+                                isCheckpoint: /^cp\|/.test(message),
+                                time: +new Date()
+                            });
                             cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
@@ -420,7 +467,7 @@ var factory = function (Netflux) {
                     }
                 };
 
-                if (ChainPad) {
+                if (ChainPad && !realtime) {
                     toReturn.realtime = realtime = createRealtime();
                 }
 
@@ -434,6 +481,7 @@ var factory = function (Netflux) {
                         channel: channel,
                     });
                 }
+
             }
 
             if (config.onConnect) {
@@ -461,6 +509,10 @@ var factory = function (Netflux) {
                     lastKnownHash: lastKnownHash,
                     metadata: metadata
                 };
+                if (Cache && Array.isArray(channelCache) && channelCache.length) {
+                    cfg.lastKnownHash = channelCache[channelCache.length - 1].hash;
+                    console.error('LKH', cfg.lastKnownHash);
+                }
                 // Reset the queue when asking for history: the pending messages will be included
                 // in the new history
                 messagesQueue = [];
@@ -503,18 +555,62 @@ var factory = function (Netflux) {
         };
 
         joinSession = function (endPoint, cb) {
-            // a websocket URL has been provided
-            // connect to it with Netflux.
-            if (typeof(endPoint) === 'string') {
-                Netflux.connect(endPoint).then(cb, onConnectError);
-            } else if (typeof(endPoint.then) === 'function') {
-                // a netflux network promise was provided
-                // connect to it and use a channel
-                endPoint.then(cb, onConnectError);
-            } else {
-                // assume it's a network and try to connect.
-                cb(endPoint);
+            var join = function () {
+                // a websocket URL has been provided
+                // connect to it with Netflux.
+                if (typeof(endPoint) === 'string') {
+                    Netflux.connect(endPoint).then(cb, onConnectError);
+                } else if (typeof(endPoint.then) === 'function') {
+                    // a netflux network promise was provided
+                    // connect to it and use a channel
+                    endPoint.then(cb, onConnectError);
+                } else {
+                    // assume it's a network and try to connect.
+                    cb(endPoint);
+                }
+            };
+
+            // Check if we have a cache for this channel
+            if (Cache) {
+                Cache.getChannelCache(channel, function (err, cache) {
+                    console.error(cache, channel);
+                    validateKey = cache ? cache.k : undefined;
+                    channelCache = cache ? cache.c : [];
+
+                    // Empty cache? join the network
+                    if (!channelCache.length) {
+                        return void join();
+                    }
+
+                    // Existing cache: send the cache content and then join the network
+                    if (config.onCacheStart) {
+                        config.onCacheStart();
+                    }
+                    if (ChainPad) {
+                        toReturn.realtime = realtime = createRealtime();
+                    }
+
+                    if (config.onMessage) {
+                        channelCache.forEach(function (obj) {
+                            config.onMessage(obj.patch, "cache", validateKey,
+                                             obj.isCheckpoint, obj.hash);
+                        });
+                    }
+                    if (config.onCacheReady) {
+                        config.onCacheReady({
+                            id: channel,
+                            realtime: realtime
+                        });
+                    }
+// if (channel === "8d15e56ecb44625b6f4d1d3e33fa8522") { return; } // XXX
+
+                    join();
+                });
+                return;
             }
+
+            // No cache provided, join the channel
+            join();
         };
 
         var firstConnection = true;
