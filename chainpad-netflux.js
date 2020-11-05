@@ -87,10 +87,11 @@ var factory = function (Netflux) {
             // will automatically delete it from memory
             // XXX WIP
             if (Array.isArray(channelCache)) {
-                console.warn(JSON.stringify(channelCache, 0, 2));
+                console.warn(channelCache);
                 channelCache.forEach(function (obj) {
                     realtime.message(obj.patch);
                 });
+                // If userDoc is empty string, delete the cache
             }
 
             realtime._patch = realtime.patch;
@@ -109,7 +110,9 @@ var factory = function (Netflux) {
             };
 
             // Sending a message...
-            realtime.onMessage(wcObject.send);
+            realtime.onMessage(function (msg, cb, curve) {
+                wcObject.send(msg, cb, curve);
+            });
 
             realtime.onPatch(function () {
                 if (config.onRemote) {
@@ -228,11 +231,9 @@ var factory = function (Netflux) {
                 channelCache[channelCache.length - 1].hash === obj.hash) { return; }
             channelCache.push(obj);
             var i = channelCache.length;
-            console.error(i, channelCache);
             Cache.storeCache(channel, validateKey, channelCache, function (err) {
                 // XXX WIP: invalidate cache if err?
                 if (err) { return void console.error(err); }
-                console.warn(i);
             });
         };
 
@@ -355,7 +356,7 @@ var factory = function (Netflux) {
                         patch: message,
                         hash: lastKnownHash,
                         isCheckpoint: isCp,
-                        time: parsed1[5]
+                        time: parsed1 ? parsed1[5] : (+new Date())
                     });
                 } catch (e) {
                     console.error(e);
@@ -434,7 +435,6 @@ var factory = function (Netflux) {
                         wcObject.wc.bcast(message).then(function() {
                             lastKnownHash = hash;
                             delete lastSent[hash];
-                            console.log(message);
                             fillCache({
                                 patch: _message,
                                 hash: hash,
@@ -555,11 +555,15 @@ var factory = function (Netflux) {
         };
 
         joinSession = function (endPoint, cb) {
+            var promise;
+            if (typeof(endPoint) === 'string') {
+                promise = Netflux.connect(endPoint);
+            }
             var join = function () {
                 // a websocket URL has been provided
                 // connect to it with Netflux.
                 if (typeof(endPoint) === 'string') {
-                    Netflux.connect(endPoint).then(cb, onConnectError);
+                    promise.then(cb, onConnectError);
                 } else if (typeof(endPoint.then) === 'function') {
                     // a netflux network promise was provided
                     // connect to it and use a channel
@@ -599,10 +603,12 @@ var factory = function (Netflux) {
                     if (config.onCacheReady) {
                         config.onCacheReady({
                             id: channel,
-                            realtime: realtime
+                            realtime: realtime,
+                            networkPromise: promise
                         });
                     }
 // if (channel === "8d15e56ecb44625b6f4d1d3e33fa8522") { return; } // XXX
+// return void setTimeout(join, 5000); // XXX test
 
                     join();
                 });
@@ -646,7 +652,7 @@ var factory = function (Netflux) {
         };
 
         joinSession(network || websocketUrl, function (_network) {
-            network = network || _network;
+            network = _network;
             // pass messages that come out of netflux into our local handler
             if (firstConnection) {
                 firstConnection = false;
