@@ -86,12 +86,20 @@ var factory = function (Netflux) {
             // If we have a cache, use it: if this cache is deprecated, ChainPad's pruning system
             // will automatically delete it from memory
             // XXX WIP
-            if (Array.isArray(channelCache)) {
+            if (Cache && Array.isArray(channelCache)) {
                 console.warn(channelCache);
                 channelCache.forEach(function (obj) {
                     realtime.message(obj.patch);
                 });
                 // If userDoc is empty string, delete the cache
+                var doc = realtime.getUserDoc();
+                if (doc === '') {
+                    realtime.abort();
+                    channelCache = [];
+                    Cache.clearChannel(channel);
+                    createRealtime();
+                    return;
+                }
             }
 
             realtime._patch = realtime.patch;
@@ -170,6 +178,12 @@ var factory = function (Netflux) {
                 });
             }
 
+            // Now that we're ready, it's too late to ask for the normal history is our
+            // cache was corrupted.
+            // The application itself should detect it and act accordingly (force a cache reset
+            // and reload for example)
+            delete toReturn.resetCache;
+
             // we're fully synced
             initializing = false;
 
@@ -180,8 +194,9 @@ var factory = function (Netflux) {
                     userList: userList,
                     myId: wc.myID,
                     leave: wc.leave,
-                    metadata: metadata
+                    metadata: metadata,
                 });
+                delete toReturn.noCache;
             }
 
             if (messagesQueue.length) {
@@ -225,15 +240,30 @@ var factory = function (Netflux) {
             }
         };
 
+        var firstFillCache = true;
         var fillCache = function (obj) {
             if (!Cache) { return; }
             if (channelCache.length &&
                 channelCache[channelCache.length - 1].hash === obj.hash) { return; }
+
+            // Mark the first message of the cache as a checkpoint: it's either a true
+            // checkpoint and already marked as such, or it's the first message of the chain.
+            if (!channelCache.length && firstFillCache) {
+                obj.isCheckpoint = true;
+                firstFillCache = false;
+            }
+
+            // the cache should start with a "checkpoint"
+            if (!channelCache.length && !obj.isCheckpoint) { return; }
             channelCache.push(obj);
-            var i = channelCache.length;
+
             Cache.storeCache(channel, validateKey, channelCache, function (err) {
-                // XXX WIP: invalidate cache if err?
-                if (err) { return void console.error(err); }
+                if (err) {
+                    // One patch was not stored? invalidate the cache
+                    Cache.clearChannel(channel);
+                    channelCache = [];
+                    return void console.error(err);
+                }
             });
         };
 
@@ -504,20 +534,37 @@ var factory = function (Netflux) {
                 }
 
                 // Add the validateKey if we are the channel creator and we have a validateKey
-                var cfg = {
-                    txid: txid,
-                    lastKnownHash: lastKnownHash,
-                    metadata: metadata
+                var sendGetHistory = function () {
+                    var cfg = {
+                        txid: txid,
+                        lastKnownHash: lastKnownHash,
+                        metadata: metadata
+                    };
+                    if (Cache && Array.isArray(channelCache) && channelCache.length) {
+                        cfg.lastKnownHash = channelCache[channelCache.length - 1].hash;
+                        console.error('LKH', cfg.lastKnownHash);
+                    }
+                    // Reset the queue when asking for history: the pending messages will be included
+                    // in the new history
+                    messagesQueue = [];
+                    var msg = ['GET_HISTORY', wc.id, cfg];
+                    if (hk) { network.sendto(hk, JSON.stringify(msg)); }
                 };
-                if (Cache && Array.isArray(channelCache) && channelCache.length) {
-                    cfg.lastKnownHash = channelCache[channelCache.length - 1].hash;
-                    console.error('LKH', cfg.lastKnownHash);
-                }
-                // Reset the queue when asking for history: the pending messages will be included
-                // in the new history
-                messagesQueue = [];
-                var msg = ['GET_HISTORY', wc.id, cfg];
-                if (hk) { network.sendto(hk, JSON.stringify(msg)); }
+                sendGetHistory();
+
+                // If the resulting chainpad is empty with our cache, reste it and ask for normal
+                // history.
+                toReturn.resetCache = function () {
+                    // ignore all history messages coming from the GET_HISTORY based on the cache:
+                    // use a new txid to ignore incoming messages
+                    channelCache = [];
+                    Cache.clearChannel(channel);
+                    txid = Math.floor(Math.random() * 1000000);
+                    onChannelError({
+                        error: "EUNKNOWN",
+                        message: "Corrupted cache"
+                    }, wc);
+                };
             } else {
                 onReady(wc, network);
             }
@@ -577,7 +624,6 @@ var factory = function (Netflux) {
             // Check if we have a cache for this channel
             if (Cache) {
                 Cache.getChannelCache(channel, function (err, cache) {
-                    console.error(cache, channel);
                     validateKey = cache ? cache.k : undefined;
                     channelCache = cache ? cache.c : [];
 
@@ -594,8 +640,12 @@ var factory = function (Netflux) {
                         toReturn.realtime = realtime = createRealtime();
                     }
 
+                    // "createRealtime" will empty the cache if it detects that it results in an
+                    // empty string in chainpad
+                    if (!channelCache.length) { return void join(); }
+
                     if (config.onMessage) {
-                        channelCache.forEach(function (obj) {
+                        channelCache.forEach(function (obj, i) {
                             config.onMessage(obj.patch, "cache", validateKey,
                                              obj.isCheckpoint, obj.hash);
                         });
@@ -607,11 +657,16 @@ var factory = function (Netflux) {
                             networkPromise: promise
                         });
                     }
-// if (channel === "8d15e56ecb44625b6f4d1d3e33fa8522") { return; } // XXX
+//if (channel === "8d15e56ecb44625b6f4d1d3e33fa8522") { return; } // XXX
+//if (channel === "608b0a3b8eb955ecf56785ce3b3bf32c") { return; } // XXX
 // return void setTimeout(join, 5000); // XXX test
 
                     join();
                 });
+                toReturn.resetCache = function () {
+                    Cache.clearChannel(channel);
+                    channelCache = [];
+                };
                 return;
             }
 
