@@ -87,7 +87,6 @@ var factory = function (Netflux) {
             // will automatically delete it from memory
             // XXX WIP
             if (Cache && Array.isArray(channelCache)) {
-                console.warn(channelCache);
                 channelCache.forEach(function (obj) {
                     realtime.message(obj.patch);
                 });
@@ -182,7 +181,7 @@ var factory = function (Netflux) {
             // cache was corrupted.
             // The application itself should detect it and act accordingly (force a cache reset
             // and reload for example)
-            delete toReturn.resetCache;
+            //delete toReturn.resetCache; // XXX
 
             // we're fully synced
             initializing = false;
@@ -542,7 +541,6 @@ var factory = function (Netflux) {
                     };
                     if (Cache && Array.isArray(channelCache) && channelCache.length) {
                         cfg.lastKnownHash = channelCache[channelCache.length - 1].hash;
-                        console.error('LKH', cfg.lastKnownHash);
                     }
                     // Reset the queue when asking for history: the pending messages will be included
                     // in the new history
@@ -557,6 +555,7 @@ var factory = function (Netflux) {
                 toReturn.resetCache = function () {
                     // ignore all history messages coming from the GET_HISTORY based on the cache:
                     // use a new txid to ignore incoming messages
+                    initializing = true;
                     channelCache = [];
                     Cache.clearChannel(channel);
                     txid = Math.floor(Math.random() * 1000000);
