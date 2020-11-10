@@ -465,7 +465,7 @@ var factory = function (Netflux) {
                             lastKnownHash = hash;
                             delete lastSent[hash];
                             fillCache({
-                                patch: _message,
+                                patch: removeCp(_message),
                                 hash: hash,
                                 isCheckpoint: /^cp\|/.test(message),
                                 time: +new Date()
