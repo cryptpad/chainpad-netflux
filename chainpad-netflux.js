@@ -47,6 +47,7 @@ var factory = function (Netflux) {
 
         var Cache = config.Cache;
         var channelCache;
+        var initialCache = false;
 
         var txid = Math.floor(Math.random() * 1000000);
 
@@ -85,8 +86,7 @@ var factory = function (Netflux) {
 
             // If we have a cache, use it: if this cache is deprecated, ChainPad's pruning system
             // will automatically delete it from memory
-            // XXX WIP
-            if (Cache && Array.isArray(channelCache)) {
+            if (Cache && Array.isArray(channelCache) && channelCache.length) {
                 channelCache.forEach(function (obj) {
                     realtime.message(obj.patch);
                 });
@@ -169,6 +169,18 @@ var factory = function (Netflux) {
             // message through "network" when it is synced, and it triggers onReady for each channel joined.
             if (!initializing) { return; }
 
+            // If we have a chainpad instance AND this instance is empty AND we have a
+            // non-empty cache, it means the cache is probably corrupted: reset with no cache.
+            // If we don't have a chainpad instance, the application has to detect itself if the
+            // cache is corrupted.
+            try {
+                if (initialCache && realtime && realtime.getUserDoc() === '') {
+                    return void toReturn.resetCache();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+
             if (realtime) { realtime.start(); }
 
             if(config.setMyID) {
@@ -176,12 +188,6 @@ var factory = function (Netflux) {
                     myID: wc.myID
                 });
             }
-
-            // Now that we're ready, it's too late to ask for the normal history is our
-            // cache was corrupted.
-            // The application itself should detect it and act accordingly (force a cache reset
-            // and reload for example)
-            //delete toReturn.resetCache; // XXX
 
             // we're fully synced
             initializing = false;
@@ -259,9 +265,12 @@ var factory = function (Netflux) {
             Cache.storeCache(channel, validateKey, channelCache, function (err) {
                 if (err) {
                     // One patch was not stored? invalidate the cache
-                    Cache.clearChannel(channel);
+                    Cache.clearChannel(channel, function () {
+                        console.warn('Cache cleared', channel);
+                    });
+                    var _cache = channelCache;
                     channelCache = [];
-                    return void console.error(err);
+                    return void console.error(err, channel, _cache, validateKey);
                 }
             });
         };
@@ -631,6 +640,8 @@ var factory = function (Netflux) {
                         return void join();
                     }
 
+                    initialCache = true;
+
                     // Existing cache: send the cache content and then join the network
                     if (config.onCacheStart) {
                         config.onCacheStart();
@@ -656,9 +667,6 @@ var factory = function (Netflux) {
                             networkPromise: promise
                         });
                     }
-//if (channel === "8d15e56ecb44625b6f4d1d3e33fa8522") { return; } // XXX
-//if (channel === "608b0a3b8eb955ecf56785ce3b3bf32c") { return; } // XXX
-// return void setTimeout(join, 5000); // XXX test
 
                     join();
                 });
