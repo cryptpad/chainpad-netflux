@@ -45,6 +45,10 @@ var factory = function (Netflux) {
         var lastSent = {};
         var messagesQueue = [];
 
+        var Cache = config.Cache;
+        var channelCache;
+        var initialCache = false;
+
         var txid = Math.floor(Math.random() * 1000000);
 
         var metadata = config.metadata || {};
@@ -79,6 +83,24 @@ var factory = function (Netflux) {
                 avgSyncMilliseconds: config.avgSyncMilliseconds,
                 logLevel: typeof(config.logLevel) !== 'undefined'? config.logLevel : 1
             });
+
+            // If we have a cache, use it: if this cache is deprecated, ChainPad's pruning system
+            // will automatically delete it from memory
+            if (Cache && Array.isArray(channelCache) && channelCache.length) {
+                channelCache.forEach(function (obj) {
+                    realtime.message(obj.patch);
+                });
+                // If userDoc is empty string, delete the cache
+                var doc = realtime.getUserDoc();
+                if (doc === '') {
+                    realtime.abort();
+                    channelCache = [];
+                    Cache.clearChannel(channel);
+                    createRealtime();
+                    return;
+                }
+            }
+
             realtime._patch = realtime.patch;
             realtime.patch = function (patch, x, y) {
                 if (initializing) {
@@ -95,7 +117,9 @@ var factory = function (Netflux) {
             };
 
             // Sending a message...
-            realtime.onMessage(wcObject.send);
+            realtime.onMessage(function (msg, cb, curve) {
+                wcObject.send(msg, cb, curve);
+            });
 
             realtime.onPatch(function () {
                 if (config.onRemote) {
@@ -104,6 +128,7 @@ var factory = function (Netflux) {
                     });
                 }
             });
+
             return realtime;
         };
 
@@ -144,6 +169,18 @@ var factory = function (Netflux) {
             // message through "network" when it is synced, and it triggers onReady for each channel joined.
             if (!initializing) { return; }
 
+            // If we have a chainpad instance AND this instance is empty AND we have a
+            // non-empty cache, it means the cache is probably corrupted: reset with no cache.
+            // If we don't have a chainpad instance, the application has to detect itself if the
+            // cache is corrupted.
+            try {
+                if (initialCache && realtime && realtime.getUserDoc() === '') {
+                    return void toReturn.resetCache();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+
             if (realtime) { realtime.start(); }
 
             if(config.setMyID) {
@@ -162,7 +199,7 @@ var factory = function (Netflux) {
                     userList: userList,
                     myId: wc.myID,
                     leave: wc.leave,
-                    metadata: metadata
+                    metadata: metadata,
                 });
             }
 
@@ -191,6 +228,10 @@ var factory = function (Netflux) {
                 // We're going to rejoin the channel without lastKnownHash.
                 // Kill chainpad and make a new one to start fresh.
                 if (ChainPad) {
+                    if (Cache) {
+                        channelCache = [];
+                        Cache.clearChannel(channel);
+                    }
                     toReturn.realtime = realtime = createRealtime();
                 }
                 joinSession(network, connectTo);
@@ -201,6 +242,36 @@ var factory = function (Netflux) {
                     toReturn.stop();
                 } catch (e) {}
             }
+        };
+
+        var firstFillCache = true;
+        var fillCache = function (obj) {
+            if (!Cache) { return; }
+            if (channelCache.length &&
+                channelCache[channelCache.length - 1].hash === obj.hash) { return; }
+
+            // Mark the first message of the cache as a checkpoint: it's either a true
+            // checkpoint and already marked as such, or it's the first message of the chain.
+            if (!channelCache.length && firstFillCache) {
+                obj.isCheckpoint = true;
+                firstFillCache = false;
+            }
+
+            // the cache should start with a "checkpoint"
+            if (!channelCache.length && !obj.isCheckpoint) { return; }
+            channelCache.push(obj);
+
+            Cache.storeCache(channel, validateKey, channelCache, function (err) {
+                if (err) {
+                    // One patch was not stored? invalidate the cache
+                    Cache.clearChannel(channel, function () {
+                        console.warn('Cache cleared', channel);
+                    });
+                    var _cache = channelCache;
+                    channelCache = [];
+                    return void console.error(err, channel, _cache, validateKey);
+                }
+            });
         };
 
         var onMessage = function (peer, msg, wc, network, direct) {
@@ -285,6 +356,7 @@ var factory = function (Netflux) {
             try {
                 msg = Crypto.decrypt(msg, validateKey, isHk);
             } catch (err) {
+                console.error(msg, validateKey, channel);
                 console.error(err);
             }
 
@@ -317,6 +389,12 @@ var factory = function (Netflux) {
                         config.onMessage(message, peer, validateKey,
                                          isCp, lastKnownHash, senderCurve);
                     }
+                    fillCache({
+                        patch: message,
+                        hash: lastKnownHash,
+                        isCheckpoint: isCp,
+                        time: parsed1 ? parsed1[5] : (+new Date())
+                    });
                 } catch (e) {
                     console.error(e);
                 }
@@ -394,6 +472,12 @@ var factory = function (Netflux) {
                         wcObject.wc.bcast(message).then(function() {
                             lastKnownHash = hash;
                             delete lastSent[hash];
+                            fillCache({
+                                patch: removeCp(_message),
+                                hash: hash,
+                                isCheckpoint: /^cp\|/.test(message),
+                                time: +new Date()
+                            });
                             cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
@@ -420,7 +504,7 @@ var factory = function (Netflux) {
                     }
                 };
 
-                if (ChainPad) {
+                if (ChainPad && !realtime) {
                     toReturn.realtime = realtime = createRealtime();
                 }
 
@@ -434,6 +518,7 @@ var factory = function (Netflux) {
                         channel: channel,
                     });
                 }
+
             }
 
             if (config.onConnect) {
@@ -456,16 +541,37 @@ var factory = function (Netflux) {
                 }
 
                 // Add the validateKey if we are the channel creator and we have a validateKey
-                var cfg = {
-                    txid: txid,
-                    lastKnownHash: lastKnownHash,
-                    metadata: metadata
+                var sendGetHistory = function () {
+                    var cfg = {
+                        txid: txid,
+                        lastKnownHash: lastKnownHash,
+                        metadata: metadata
+                    };
+                    if (Cache && Array.isArray(channelCache) && channelCache.length) {
+                        cfg.lastKnownHash = channelCache[channelCache.length - 1].hash;
+                    }
+                    // Reset the queue when asking for history: the pending messages will be included
+                    // in the new history
+                    messagesQueue = [];
+                    var msg = ['GET_HISTORY', wc.id, cfg];
+                    if (hk) { network.sendto(hk, JSON.stringify(msg)); }
                 };
-                // Reset the queue when asking for history: the pending messages will be included
-                // in the new history
-                messagesQueue = [];
-                var msg = ['GET_HISTORY', wc.id, cfg];
-                if (hk) { network.sendto(hk, JSON.stringify(msg)); }
+                sendGetHistory();
+
+                // If the resulting chainpad is empty with our cache, reste it and ask for normal
+                // history.
+                toReturn.resetCache = function () {
+                    // ignore all history messages coming from the GET_HISTORY based on the cache:
+                    // use a new txid to ignore incoming messages
+                    initializing = true;
+                    channelCache = [];
+                    Cache.clearChannel(channel);
+                    txid = Math.floor(Math.random() * 1000000);
+                    onChannelError({
+                        error: "EUNKNOWN",
+                        message: "Corrupted cache"
+                    }, wc);
+                };
             } else {
                 onReady(wc, network);
             }
@@ -503,18 +609,75 @@ var factory = function (Netflux) {
         };
 
         joinSession = function (endPoint, cb) {
-            // a websocket URL has been provided
-            // connect to it with Netflux.
+            var promise;
             if (typeof(endPoint) === 'string') {
-                Netflux.connect(endPoint).then(cb, onConnectError);
-            } else if (typeof(endPoint.then) === 'function') {
-                // a netflux network promise was provided
-                // connect to it and use a channel
-                endPoint.then(cb, onConnectError);
-            } else {
-                // assume it's a network and try to connect.
-                cb(endPoint);
+                promise = Netflux.connect(endPoint);
             }
+            var join = function () {
+                // a websocket URL has been provided
+                // connect to it with Netflux.
+                if (typeof(endPoint) === 'string') {
+                    promise.then(cb, onConnectError);
+                } else if (typeof(endPoint.then) === 'function') {
+                    // a netflux network promise was provided
+                    // connect to it and use a channel
+                    endPoint.then(cb, onConnectError);
+                } else {
+                    // assume it's a network and try to connect.
+                    cb(endPoint);
+                }
+            };
+
+            // Check if we have a cache for this channel
+            if (Cache) {
+                Cache.getChannelCache(channel, function (err, cache) {
+                    validateKey = cache ? cache.k : undefined;
+                    channelCache = cache ? cache.c : [];
+
+                    // Empty cache? join the network
+                    if (!channelCache.length) {
+                        return void join();
+                    }
+
+                    initialCache = true;
+
+                    // Existing cache: send the cache content and then join the network
+                    if (config.onCacheStart) {
+                        config.onCacheStart();
+                    }
+                    if (ChainPad) {
+                        toReturn.realtime = realtime = createRealtime();
+                    }
+
+                    // "createRealtime" will empty the cache if it detects that it results in an
+                    // empty string in chainpad
+                    if (!channelCache.length) { return void join(); }
+
+                    if (config.onMessage) {
+                        channelCache.forEach(function (obj, i) {
+                            config.onMessage(obj.patch, "cache", validateKey,
+                                             obj.isCheckpoint, obj.hash);
+                        });
+                    }
+                    if (config.onCacheReady) {
+                        config.onCacheReady({
+                            id: channel,
+                            realtime: realtime,
+                            networkPromise: promise
+                        });
+                    }
+
+                    join();
+                });
+                toReturn.resetCache = function () {
+                    Cache.clearChannel(channel);
+                    channelCache = [];
+                };
+                return;
+            }
+
+            // No cache provided, join the channel
+            join();
         };
 
         var firstConnection = true;
@@ -550,7 +713,7 @@ var factory = function (Netflux) {
         };
 
         joinSession(network || websocketUrl, function (_network) {
-            network = network || _network;
+            network = _network;
             // pass messages that come out of netflux into our local handler
             if (firstConnection) {
                 firstConnection = false;
