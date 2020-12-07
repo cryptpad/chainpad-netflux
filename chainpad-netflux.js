@@ -201,7 +201,6 @@ var factory = function (Netflux) {
                     leave: wc.leave,
                     metadata: metadata,
                 });
-                delete toReturn.noCache;
             }
 
             if (messagesQueue.length) {
