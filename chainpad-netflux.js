@@ -227,12 +227,15 @@ var factory = function (Netflux) {
                 if (wc) { wc.leave(); }
                 // We're going to rejoin the channel without lastKnownHash.
                 // Kill chainpad and make a new one to start fresh.
-                if (ChainPad) {
-                    if (Cache) {
-                        channelCache = [];
-                        Cache.clearChannel(channel);
-                    }
-                    toReturn.realtime = realtime = createRealtime();
+                if (Cache) {
+                    channelCache = [];
+                    Cache.clearChannel(channel, function () {
+                        if (ChainPad) {
+                            toReturn.realtime = realtime = createRealtime();
+                        }
+                        joinSession(network, connectTo);
+                    });
+                    return;
                 }
                 joinSession(network, connectTo);
                 return;
