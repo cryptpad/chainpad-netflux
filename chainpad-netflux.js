@@ -88,7 +88,17 @@ var factory = function (Netflux) {
             // will automatically delete it from memory
             if (Cache && Array.isArray(channelCache) && channelCache.length) {
                 channelCache.forEach(function (obj) {
-                    realtime.message(obj.patch);
+                    var patch = obj.patch;
+                    if (!/^\[/.test(patch)) {
+                        try {
+                            patch = Crypto.decrypt(patch, validateKey, true);
+                        } catch (err) {
+                            console.error(patch, validateKey, channel);
+                            console.error(err);
+                        }
+                        patch = unBencode(patch);
+                    }
+                    realtime.message(patch);
                 });
                 // If userDoc is empty string, delete the cache
                 var doc = realtime.getUserDoc();
