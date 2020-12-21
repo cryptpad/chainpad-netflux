@@ -184,7 +184,8 @@ var factory = function (Netflux) {
             // If we don't have a chainpad instance, the application has to detect itself if the
             // cache is corrupted.
             try {
-                if (initialCache && realtime && realtime.getUserDoc() === '') {
+                var doc = realtime && realtime.getUserDoc();
+                if (initialCache && realtime && (doc === '' || doc === config.initialState)) {
                     return void toReturn.resetCache();
                 }
             } catch (e) {
