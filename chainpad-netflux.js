@@ -163,6 +163,8 @@ var factory = function (Netflux) {
             userList.onChange();
         };
 
+        var connectTo = function () {};
+
         // update UI components to show that one of the other peers has left
         var onLeaving = function(peer) {
             if (config.onLeave)  { config.onLeave(peer); }
@@ -479,7 +481,7 @@ var factory = function (Netflux) {
             if (firstConnection) {
                 wcObject.send = function (_message, cb, curvePublic) {
                     // Filter messages sent by Chainpad to make it compatible with Netflux
-                    message = msgOut(_message, curvePublic);
+                    var message = msgOut(_message, curvePublic);
                     if(message) {
                         var hash = message.slice(0, 64);
                         lastSent[hash] = cb;
@@ -668,7 +670,7 @@ var factory = function (Netflux) {
                     if (!channelCache.length) { return void join(); }
 
                     if (config.onMessage) {
-                        channelCache.forEach(function (obj, i) {
+                        channelCache.forEach(function (obj) {
                             config.onMessage(obj.patch, "cache", validateKey,
                                              obj.isCheckpoint, obj.hash);
                         });
@@ -698,7 +700,7 @@ var factory = function (Netflux) {
         /*  Connect to the Netflux network, or fall back to a WebSocket
             in theory this lets us connect to more netflux channels using only
             one network. */
-        var connectTo = function (network, first) {
+        connectTo = function (network, first) {
             if (stopped) { return; }
             // join the netflux network, promise to handle opening of the channel
             network.join(channel || null).then(function(wc) {
