@@ -74,7 +74,8 @@ var factory = function (Netflux) {
         };
 
         var createRealtime = function() {
-            var realtime = ChainPad.create({
+            if (realtime && typeof(realtime.abort) === "function") { realtime.abort(); }
+            var chainpad = ChainPad.create({
                 userName: userName,
                 initialState: config.initialState,
                 transformFunction: config.transformFunction,
@@ -98,12 +99,12 @@ var factory = function (Netflux) {
                         }
                         patch = unBencode(patch);
                     }
-                    realtime.message(patch);
+                    chainpad.message(patch);
                 });
                 // If userDoc is empty string, delete the cache
-                var doc = realtime.getUserDoc();
+                var doc = chainpad.getUserDoc();
                 if (doc === '') {
-                    realtime.abort();
+                    chainpad.abort();
                     channelCache = [];
                     Cache.clearChannel(channel);
                     createRealtime();
@@ -111,35 +112,35 @@ var factory = function (Netflux) {
                 }
             }
 
-            realtime._patch = realtime.patch;
-            realtime.patch = function (patch, x, y) {
+            chainpad._patch = chainpad.patch;
+            chainpad.patch = function (patch, x, y) {
                 if (initializing) {
                     console.error("attempted to change the content before chainpad was synced");
                 }
-                return realtime._patch(patch, x, y);
+                return chainpad._patch(patch, x, y);
             };
-            realtime._change = realtime.change;
-            realtime.change = function (offset, count, chars) {
+            chainpad._change = chainpad.change;
+            chainpad.change = function (offset, count, chars) {
                 if (initializing) {
                     console.error("attempted to change the content before chainpad was synced");
                 }
-                return realtime._change(offset, count, chars);
+                return chainpad._change(offset, count, chars);
             };
 
             // Sending a message...
-            realtime.onMessage(function (msg, cb, curve) {
+            chainpad.onMessage(function (msg, cb, curve) {
                 wcObject.send(msg, cb, curve);
             });
 
-            realtime.onPatch(function () {
+            chainpad.onPatch(function () {
                 if (config.onRemote) {
                     config.onRemote({
-                        realtime: realtime
+                        realtime: chainpad
                     });
                 }
             });
 
-            return realtime;
+            return chainpad;
         };
 
         var userList = {
