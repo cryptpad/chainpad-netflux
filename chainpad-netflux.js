@@ -107,8 +107,7 @@ var factory = function (Netflux) {
                     chainpad.abort();
                     channelCache = [];
                     Cache.clearChannel(channel);
-                    createRealtime();
-                    return;
+                    return createRealtime();
                 }
             }
 
