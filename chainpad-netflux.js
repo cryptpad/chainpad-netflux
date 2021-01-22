@@ -42,6 +42,7 @@ var factory = function (Netflux) {
         var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
         var stopped = false;
         var lastKnownHash = config.lastKnownHash;
+        var lkhOffset = config.lkhOffset;
         var lastSent = {};
         var messagesQueue = [];
 
@@ -237,6 +238,7 @@ var factory = function (Netflux) {
             }
             if (parsed.error === "EUNKNOWN") { // Invalid last known hash
                 lastKnownHash = undefined;
+                lkhOffset = undefined;
                 if (wc) { wc.leave(); }
                 // We're going to rejoin the channel without lastKnownHash.
                 // Kill chainpad and make a new one to start fresh.
@@ -290,7 +292,7 @@ var factory = function (Netflux) {
             });
         };
 
-        var onMessage = function (peer, msg, wc, network, direct) {
+        var onMessage = function (peer, msg, opts, wc, network, direct) {
             // unpack the history keeper from the webchannel
             var hk = network.historyKeeper;
             var isHk = peer === hk;
@@ -340,6 +342,8 @@ var factory = function (Netflux) {
                 }
             }
             if (isHk) {
+                // XXX get offset on history message
+
                 // if the peer is the 'history keeper', extract their message
                 var parsed1 = JSON.parse(msg);
 
@@ -355,14 +359,20 @@ var factory = function (Netflux) {
                 }
 
                 msg = parsed1[4];
+
+                if (typeof(parsed1[5]) === "object" && !opts) {
+                    opts = parsed1[5] || {};
+                }
+
                 // Check that this is a message for us
                 if (parsed1[3] !== wc.id) { return; }
             }
 
             lastKnownHash = msg.slice(0,64);
+            lkhOffset = opts ? opts.offset : undefined;
 
             if (typeof(lastSent[lastKnownHash]) === "function") {
-                lastSent[lastKnownHash](null, lastKnownHash);
+                lastSent[lastKnownHash](null, lastKnownHash, lkhOffset);
                 delete lastSent[lastKnownHash];
                 return;
             }
@@ -403,11 +413,12 @@ var factory = function (Netflux) {
                     if (realtime && isString) { realtime.message(message); }
                     if (config.onMessage) {
                         config.onMessage(message, peer, validateKey,
-                                         isCp, lastKnownHash, senderCurve);
+                                         isCp, lastKnownHash, senderCurve, lkhOffset);
                     }
                     fillCache({
                         patch: message,
                         hash: lastKnownHash,
+                        offset: lkhOffset, // XXX
                         isCheckpoint: isCp,
                         time: parsed1 ? parsed1[5] : (+new Date())
                     });
@@ -461,8 +472,8 @@ var factory = function (Netflux) {
             wc.members.forEach(onJoining);
 
             // Add the handlers to the WebChannel
-            var onMessageHandler = function (msg, sender) { //Channel msg
-                onMessage(sender, msg, wc, network);
+            var onMessageHandler = function (msg, sender, opts) { //Channel msg
+                onMessage(sender, msg, opts, wc, network);
             };
             wc.on('message', onMessageHandler);
             wc.on('join', onJoining);
@@ -485,16 +496,19 @@ var factory = function (Netflux) {
                     if(message) {
                         var hash = message.slice(0, 64);
                         lastSent[hash] = cb;
-                        wcObject.wc.bcast(message).then(function() {
+                        wcObject.wc.bcast(message).then(function(obj) {
+                            var offset = obj && obj.offset;
                             lastKnownHash = hash;
+                            lkhOffset = offset;
                             delete lastSent[hash];
                             fillCache({
                                 patch: removeCp(_message),
                                 hash: hash,
+                                offset: offset,
                                 isCheckpoint: /^cp\|/.test(message),
                                 time: +new Date()
                             });
-                            cb(null, hash);
+                            cb(null, hash, offset);
                         }, function(err) {
                             // The message has not been sent, display the error.
                             console.error(err);
@@ -512,6 +526,7 @@ var factory = function (Netflux) {
                                     wcObject.send(_message, cb, curvePublic);
                                 });
                             } else {
+                                console.error(err);
                                 // Otherwise tell cryptpad that your message was not sent
                                 delete lastSent[hash];
                                 cb((err && err.type) || err);
@@ -561,10 +576,12 @@ var factory = function (Netflux) {
                     var cfg = {
                         txid: txid,
                         lastKnownHash: lastKnownHash,
+                        lkhOffset: lkhOffset,
                         metadata: metadata
                     };
                     if (Cache && Array.isArray(channelCache) && channelCache.length) {
                         cfg.lastKnownHash = channelCache[channelCache.length - 1].hash;
+                        cfg.lkhOffset = channelCache[channelCache.length - 1].offset;
                     }
                     // Reset the queue when asking for history: the pending messages will be included
                     // in the new history
@@ -772,10 +789,10 @@ var factory = function (Netflux) {
                         afterReconnecting();
                     }
                 };
-                var onMessageHandler = function (msg, sender) { // Direct message
+                var onMessageHandler = function (msg, sender, opts) { // Direct message
                     var wchan = findChannelById(network.webChannels, channel);
                     if(wchan) {
-                        onMessage(sender, msg, wchan, network, true);
+                        onMessage(sender, msg, opts, wchan, network, true);
                     }
                 };
 
