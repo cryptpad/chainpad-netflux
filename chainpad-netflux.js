@@ -405,10 +405,15 @@ var factory = function (Netflux) {
                         config.onMessage(message, peer, validateKey,
                                          isCp, lastKnownHash, senderCurve);
                     }
+                    var isCacheCp = isCp;
+                    if (config.isCacheCheckpoint) {
+                        isCacheCp = config.isCacheCheckpoint(message, senderCurve);
+                    }
                     fillCache({
                         patch: message,
                         hash: lastKnownHash,
-                        isCheckpoint: isCp,
+                        isCheckpoint: isCacheCp,
+                        author: senderCurve,
                         time: parsed1 ? parsed1[5] : (+new Date())
                     });
                 } catch (e) {
@@ -488,10 +493,15 @@ var factory = function (Netflux) {
                         wcObject.wc.bcast(message).then(function() {
                             lastKnownHash = hash;
                             delete lastSent[hash];
+                            var isCacheCp = /^cp\|/.test(message);
+                            if (config.isCacheCheckpoint) {
+                                isCacheCp = config.isCacheCheckpoint(_message, curvePublic);
+                            }
                             fillCache({
                                 patch: removeCp(_message),
                                 hash: hash,
-                                isCheckpoint: /^cp\|/.test(message),
+                                isCheckpoint: isCacheCp,
+                                author: curvePublic,
                                 time: +new Date()
                             });
                             cb(null, hash);
@@ -672,7 +682,7 @@ var factory = function (Netflux) {
                     if (config.onMessage) {
                         channelCache.forEach(function (obj) {
                             config.onMessage(obj.patch, "cache", validateKey,
-                                             obj.isCheckpoint, obj.hash);
+                                             obj.isCheckpoint, obj.hash, obj.author);
                         });
                     }
                     if (config.onCacheReady) {
