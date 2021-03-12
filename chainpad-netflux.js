@@ -402,8 +402,11 @@ var factory = function (Netflux) {
                 try {
                     if (realtime && isString) { realtime.message(message); }
                     if (config.onMessage) {
+                        var obj = {
+                            time: parsed1 ? parsed1[5] : (+new Date())
+                        };
                         config.onMessage(message, peer, validateKey,
-                                         isCp, lastKnownHash, senderCurve);
+                                         isCp, lastKnownHash, senderCurve, obj);
                     }
                     var isCacheCp = isCp;
                     if (config.isCacheCheckpoint) {
@@ -681,8 +684,11 @@ var factory = function (Netflux) {
 
                     if (config.onMessage) {
                         channelCache.forEach(function (obj) {
+                            var _obj = {
+                                time: obj.time
+                            };
                             config.onMessage(obj.patch, "cache", validateKey,
-                                             obj.isCheckpoint, obj.hash, obj.author);
+                                             obj.isCheckpoint, obj.hash, obj.author, _obj);
                         });
                     }
                     if (config.onCacheReady) {
