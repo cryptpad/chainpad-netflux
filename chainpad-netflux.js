@@ -492,14 +492,31 @@ var factory = function (Netflux) {
                     var message = msgOut(_message, curvePublic);
                     if(message) {
                         var hash = message.slice(0, 64);
-                        lastSent[hash] = cb;
+                        var isCacheCp = /^cp\|/.test(message);
+                        if (config.isCacheCheckpoint) {
+                            isCacheCp = config.isCacheCheckpoint(_message, curvePublic);
+                        }
+
+                        // If we disconnect before receiving the ACK from the server, store cb
+                        // in memory to call it when we reconnect if we see our message in the
+                        // recent history. We also have to update the cache if the message
+                        // was successfully stored.
+                        lastSent[hash] = function (err, _hash) {
+                            if (!err && _hash) {
+                                fillCache({
+                                    patch: removeCp(_message),
+                                    hash: hash,
+                                    isCheckpoint: isCacheCp,
+                                    author: curvePublic,
+                                    time: +new Date()
+                                });
+                            }
+                            cb(err, _hash);
+                        };
+
                         wcObject.wc.bcast(message).then(function() {
                             lastKnownHash = hash;
                             delete lastSent[hash];
-                            var isCacheCp = /^cp\|/.test(message);
-                            if (config.isCacheCheckpoint) {
-                                isCacheCp = config.isCacheCheckpoint(_message, curvePublic);
-                            }
                             fillCache({
                                 patch: removeCp(_message),
                                 hash: hash,
