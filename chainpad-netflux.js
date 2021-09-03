@@ -851,9 +851,7 @@ var factory = function (Netflux) {
     if (typeof(module) !== 'undefined' && module.exports) {
         module.exports = factory(require("netflux-websocket"));
     } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
-        define([
-            '/bower_components/netflux-websocket/netflux-client.js'
-        ], factory);
+        define('chainpad-netflux', ['netflux-client'], factory);
     } else {
         // I'm not gonna bother supporting any other kind of instanciation
     }
