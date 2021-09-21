@@ -111,21 +111,6 @@ var factory = function (Netflux) {
                 }
             }
 
-            chainpad._patch = chainpad.patch;
-            chainpad.patch = function (patch, x, y) {
-                if (initializing) {
-                    console.error("attempted to change the content before chainpad was synced");
-                }
-                return chainpad._patch(patch, x, y);
-            };
-            chainpad._change = chainpad.change;
-            chainpad.change = function (offset, count, chars) {
-                if (initializing) {
-                    console.error("attempted to change the content before chainpad was synced");
-                }
-                return chainpad._change(offset, count, chars);
-            };
-
             // Sending a message...
             chainpad.onMessage(function (msg, cb, curve) {
                 wcObject.send(msg, cb, curve);
