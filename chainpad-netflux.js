@@ -369,12 +369,16 @@ var factory = function (Netflux) {
 
             var isCp = /^cp\|/.test(msg);
             msg = removeCp(msg);
+var t1 = +new Date(); // XXX
             try {
                 msg = Crypto.decrypt(msg, validateKey, isHk);
             } catch (err) {
                 console.error(msg, validateKey, channel);
                 console.error(err);
             }
+var t2 = +new Date();
+if (t2-t1 > 500) { console.error('dec', (t2-t1)/1000, msg.length); }
+else { console.warn('dec', (t2-t1)/1000, msg.length); }
 
             var senderCurve;
             var isString = typeof(msg) === "string";
@@ -400,7 +404,12 @@ var factory = function (Netflux) {
                 // pass the message into Chainpad
                 // don't block chainpad netflux if one handler throws
                 try {
+var t1 = +new Date();
                     if (realtime && isString) { realtime.message(message); }
+
+var t2 = +new Date();
+if (t2-t1 > 500) { console.error('cp', (t2-t1)/1000, msg.length); console.error(realtime.getUserDoc().length); }
+else { console.warn('cp', (t2-t1)/1000, msg.length); }
                     if (config.onMessage) {
                         var obj = {
                             time: parsed1 ? parsed1[5] : (+new Date())
@@ -487,9 +496,10 @@ var factory = function (Netflux) {
             };
 
             if (firstConnection) {
-                wcObject.send = function (_message, cb, curvePublic) {
+                wcObject.send = function (_message, cb, curvePublic, bypass) { // XXX
+console.warn(_message.slice(0,200));
                     // Filter messages sent by Chainpad to make it compatible with Netflux
-                    var message = msgOut(_message, curvePublic);
+                    var message = bypass ? _message : msgOut(_message, curvePublic);
                     if(message) {
                         var hash = message.slice(0, 64);
                         var isCacheCp = /^cp\|/.test(message);
@@ -514,7 +524,9 @@ var factory = function (Netflux) {
                             cb(err, _hash);
                         };
 
+console.error('bcast');
                         wcObject.wc.bcast(message).then(function() {
+console.error("done");
                             lastKnownHash = hash;
                             delete lastSent[hash];
                             fillCache({
@@ -529,7 +541,8 @@ var factory = function (Netflux) {
                             // The message has not been sent, display the error.
                             console.error(err);
 
-                            if (err && (err.type === 'enoent' || err.type === 'ENOENT')) {
+                            if (err && (err.type === 'enoent' || err.type === 'ENOENT' || err.type === 'NO_SUCH_CHANNEL')) { // XXX
+console.error('OK');
                                 // Channel not in memory on the server: join again
                                 wcObject.wc.leave();
                                 if (stopped) {
@@ -539,7 +552,7 @@ var factory = function (Netflux) {
                                 initializing = true;
                                 network.join(channel).then(function (wc) {
                                     onOpen(wc, network, false);
-                                    wcObject.send(_message, cb, curvePublic);
+                                    wcObject.send(message, cb, curvePublic, true); // XXX
                                 });
                             } else {
                                 // Otherwise tell cryptpad that your message was not sent
