@@ -124,6 +124,18 @@ var factory = function (Netflux) {
                 }
             });
 
+            chainpad.onError(function (err) {
+                if (err === 'E_MAX_SIZE_EXCEEDED') {
+                    readOnly = true;
+                    if (config.onChannelError) {
+                        config.onChannelError({
+                            error: "E_MAX_SIZE",
+                            message: "The ChainPad document has reached its maximum size"
+                        });
+                    }
+                }
+            });
+
             return chainpad;
         };
 
