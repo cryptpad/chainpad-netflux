@@ -45,6 +45,8 @@ var factory = function (Netflux) {
         var lastSent = {};
         var messagesQueue = [];
 
+        var priority = config.priority || 2;
+
         var Cache = config.Cache;
         var channelCache;
         var initialCache = false;
@@ -352,6 +354,7 @@ var factory = function (Netflux) {
                 return;
             }
 
+
             var isCp = /^cp\|/.test(msg);
             msg = removeCp(msg);
             try {
@@ -522,7 +525,7 @@ var factory = function (Netflux) {
                                     return void cb('STOPPED');
                                 }
                                 initializing = true;
-                                network.join(channel).then(function (wc) {
+                                network.join(channel, priority).then(function (wc) {
                                     onOpen(wc, network, false);
                                     wcObject.send(_message, cb, curvePublic);
                                 });
@@ -575,6 +578,7 @@ var factory = function (Netflux) {
                 var sendGetHistory = function () {
                     var cfg = {
                         txid: txid,
+                        priority: priority,
                         lastKnownHash: lastKnownHash,
                         metadata: metadata
                     };
@@ -721,7 +725,7 @@ var factory = function (Netflux) {
         connectTo = function (network, first) {
             if (stopped) { return; }
             // join the netflux network, promise to handle opening of the channel
-            network.join(channel || null).then(function(wc) {
+            network.join(channel || null, priority).then(function(wc) {
                 if (stopped) {
                     try { wc.leave(); } catch (e) {}
                     return;
