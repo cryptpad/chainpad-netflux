@@ -516,8 +516,6 @@ var factory = function (Netflux) {
                             cb(null, hash);
                         }, function(err) {
                             // The message has not been sent, display the error.
-                            console.error(err);
-
                             if (err && (err.type === 'enoent' || err.type === 'ENOENT')) {
                                 // Channel not in memory on the server: join again
                                 wcObject.wc.leave();
@@ -582,6 +580,7 @@ var factory = function (Netflux) {
                         lastKnownHash: lastKnownHash,
                         metadata: metadata
                     };
+                    if (signFunction) { cfg.signature = signFunction([wc.id, wc.myID]); }
                     if (Cache && Array.isArray(channelCache) && channelCache.length) {
                         cfg.lastKnownHash = channelCache[channelCache.length - 1].hash;
                     }
