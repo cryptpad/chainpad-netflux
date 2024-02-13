@@ -142,8 +142,4 @@ See [Chainpad: configuration parameters](https://github.com/xwiki-contrib/chainp
 
 ## License
 
-This software is and will always be available under the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the License, or (at your option)
-any later version. If you wish to use this technology in a proprietary product, please contact
-sales@xwiki.com
-
+This library is currently licensed as LGPL-2.1. Previous versions of this library (v1.0.1 and below) were licensed as AGPL-3.0.

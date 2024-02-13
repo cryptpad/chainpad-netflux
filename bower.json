@@ -11,7 +11,7 @@
     "netflux",
     "realtime"
   ],
-  "license": "AGPLv3.0",
+  "license": "LGPL-2.1",
   "homepage": "https://github.com/xwiki-labs/chainpad-netflux",
   "ignore": [
     "**/.*",
