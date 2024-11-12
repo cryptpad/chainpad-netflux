@@ -120,10 +120,11 @@ var factory = function (Netflux) {
                 wcObject.send(msg, cb, curve);
             });
 
-            chainpad.onPatch(function () {
+            chainpad.onPatch(function (patch) {
                 if (config.onRemote) {
                     config.onRemote({
-                        realtime: chainpad
+                        realtime: chainpad,
+                        patch
                     });
                 }
             });
