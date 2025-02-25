@@ -1,6 +1,6 @@
 {
   "name": "chainpad-netflux",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "A convenient wrapper around the chainpad realtime engine and the netflux transport API",
   "main": "chainpad-netflux.js",
   "scripts": {
