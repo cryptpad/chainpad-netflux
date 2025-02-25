@@ -603,7 +603,7 @@ var factory = function (Netflux) {
                     // use a new txid to ignore incoming messages
                     initializing = true;
                     channelCache = [];
-                    Cache.clearChannel(channel);
+                    if (Cache) { Cache.clearChannel(channel); }
                     txid = Math.floor(Math.random() * 1000000);
                     onChannelError({
                         error: "EUNKNOWN",
@@ -711,7 +711,7 @@ var factory = function (Netflux) {
                     join();
                 });
                 toReturn.resetCache = function () {
-                    Cache.clearChannel(channel);
+                    if (Cache) { Cache.clearChannel(channel); }
                     channelCache = [];
                 };
                 return;
