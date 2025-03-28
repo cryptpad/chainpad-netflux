@@ -61,6 +61,7 @@ var factory = function (Netflux) {
         metadata.expire = config.expire || metadata.expire;
 
         var initializing = true;
+        var reconnecting = false;
         var toReturn = {
             setReadOnly: function (state, crypto) {
                 readOnly = state;
@@ -652,6 +653,7 @@ var factory = function (Netflux) {
                 promise = Netflux.connect(endPoint);
             }
             var join = function () {
+                reconnecting = false;
                 // a websocket URL has been provided
                 // connect to it with Netflux.
                 if (typeof(endPoint) === 'string') {
@@ -667,7 +669,7 @@ var factory = function (Netflux) {
             };
 
             // Check if we have a cache for this channel
-            if (Cache) {
+            if (Cache && !reconnecting) {
                 Cache.getChannelCache(channel, function (err, cache) {
                     validateKey = cache ? cache.k : undefined;
                     channelCache = cache ? cache.c : [];
@@ -783,6 +785,7 @@ var factory = function (Netflux) {
                         });
                         var afterReconnecting = function () {
                             initializing = true;
+                            reconnecting = true;
                             userList.users=[];
                             joinSession(network, connectTo);
                         };
