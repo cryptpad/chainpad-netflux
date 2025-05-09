@@ -17,7 +17,7 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
 (function () {
-var factory = function (Netflux) {
+var factory = function (Netflux, Nacl, NaclUtil) {
     var USE_HISTORY = true;
     var CPNF = {};
 
@@ -40,7 +40,7 @@ var factory = function (Netflux) {
         var channel = config.channel;
         var Crypto = config.crypto;
         var readOnly = config.readOnly || false;
-        var ChainPad = !config.noChainPad && (config.ChainPad || window.ChainPad);
+        var ChainPad = !config.noChainPad && (config.ChainPad || globalThis.ChainPad);
         var useHistory = (typeof(config.useHistory) === 'undefined') ? USE_HISTORY : !!config.useHistory;
         var stopped = false;
         var lastKnownHash = config.lastKnownHash;
@@ -435,9 +435,9 @@ var factory = function (Netflux) {
                 var cmsg = Crypto.encrypt(msg, curvePublic);
                 if (msg.indexOf('[4') === 0) {
                     var id = '';
-                    if (window.nacl) {
-                        var hash = window.nacl.hash(window.nacl.util.decodeUTF8(msg));
-                        id = window.nacl.util.encodeBase64(hash.slice(0, 8)) + '|';
+                    if (Nacl && NaclUtil) {
+                        var hash = Nacl.hash(NaclUtil.decodeUTF8(msg));
+                        id = NaclUtil.encodeBase64(hash.slice(0, 8)) + '|';
                     } else {
                         console.log("Checkpoint sent without an ID. Nacl is missing.");
                     }
@@ -844,9 +844,17 @@ var factory = function (Netflux) {
 };
 
     if (typeof(module) !== 'undefined' && module.exports) {
-        module.exports = factory(require("netflux-websocket"));
+        module.exports = factory(
+            require("netflux-websocket"),
+            require('tweetnacl/nacl-fast'),
+            require('tweetnacl-util')
+        );
     } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
-        define('chainpad-netflux', ['netflux-client'], factory);
+        define('chainpad-netflux', [
+            'netflux-client',
+            '/components/tweetnacl/nacl-fast.min.js',
+            '/components/tweetnacl-util/nacl-util.min.js'
+        ], factory);
     } else {
         // I'm not gonna bother supporting any other kind of instanciation
     }
