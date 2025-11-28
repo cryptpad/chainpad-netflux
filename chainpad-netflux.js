@@ -145,7 +145,7 @@ var factory = function (Netflux, Nacl, NaclUtil) {
 
         var onJoining = function(peer) {
             if (config.onJoin)  { config.onJoin(peer); }
-            if(peer.length !== 32) { return; }
+            if(peer.length < 32) { return; }
             var list = userList.users;
             var index = list.indexOf(peer);
             if(index === -1) {
